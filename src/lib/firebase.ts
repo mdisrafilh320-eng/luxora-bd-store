@@ -27,6 +27,8 @@ export const resolvedFirebaseConfig = {
   firestoreDatabaseId: env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || rawFirebaseConfig.firestoreDatabaseId
 };
 
+export const firebaseConfig = resolvedFirebaseConfig;
+
 // Initialize Firebase App singleton
 const app = !getApps().length ? initializeApp(resolvedFirebaseConfig) : getApp();
 
