@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all unknown paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global security primitives & helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == 'mdisrafilh320@gmail.com'
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // --- USERS COLLECTION ---
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow update: if isValidId(userId) && (
+        isAdmin() ||
+        (isOwner(userId) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])))
+      );
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // --- PRODUCTS COLLECTION (Public Catalog) ---
+    match /products/{productId} {
+      allow read: if isValidId(productId);
+      allow create, update, delete: if isValidId(productId) && isAdmin();
+    }
+
+    // --- CATEGORIES COLLECTION (Public Taxonomy) ---
+    match /categories/{categoryId} {
+      allow read: if isValidId(categoryId);
+      allow create, update, delete: if isValidId(categoryId) && isAdmin();
+    }
+
+    // --- ORDERS COLLECTION ---
+    match /orders/{orderId} {
+      allow get: if isValidId(orderId) && (
+        isAdmin() ||
+        (isSignedIn() && resource.data.userId == request.auth.uid) ||
+        resource.data.userId == 'guest'
+      );
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isValidId(orderId) && (
+        (isSignedIn() && request.resource.data.userId == request.auth.uid) ||
+        request.resource.data.userId == 'guest'
+      );
+      allow update: if isValidId(orderId) && (
+        isAdmin() ||
+        (isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.userId == resource.data.userId)
+      );
+      allow delete: if isValidId(orderId) && isAdmin();
+    }
+
+    // --- ADMINS COLLECTION ---
+    match /admins/{adminId} {
+      allow read, write: if isValidId(adminId) && isAdmin();
+    }
+
+    // --- SETTINGS COLLECTION (Public Read for Storefront/Checkout, Admin Write) ---
+    match /settings/{settingId} {
+      allow read: if isValidId(settingId);
+      allow write: if isValidId(settingId) && isAdmin();
+    }
+  }
+}

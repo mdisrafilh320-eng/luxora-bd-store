@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-serif: 'Cinzel', serif;
+    --font-bn: 'Hind Siliguri', 'Plus Jakarta Sans', sans-serif;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #0A0A0C;
+    color: #F3F4F6;
+    overflow-x: hidden;
+  }
+
+  /* Custom subtle gold scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0A0A0C;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1E1E24;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #D4AF37;
+  }
+}
+
+.gold-text {
+  color: #D4AF37;
+}
+
+.gold-bg {
+  background-color: #D4AF37;
+}
+
+.gold-border {
+  border-color: #D4AF37;
+}
+
+.slate-bg {
+  background-color: #1E1E24;
+}
+
+.card-bg {
+  background-color: #121212;
+}
+
+.font-luxury {
+  font-family: 'Cinzel', serif;
+}
+
+.font-bangla {
+  font-family: 'Hind Siliguri', sans-serif;
+}
+
+/* Luxury gold glow effect utilities */
+.gold-glow {
+  box-shadow: 0 0 25px -5px rgba(212, 175, 55, 0.25);
+}
+
+.gold-glow-lg {
+  box-shadow: 0 50px 100px -20px rgba(212, 175, 55, 0.2);
+}
+
+.gold-border-gradient {
+  border-image: linear-gradient(to bottom right, #D4AF37, rgba(212, 175, 55, 0.2), #1E1E24) 1;
+}
+
+/* Subtle luxury backdrop blur */
+.glass-panel {
+  background: rgba(18, 18, 22, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+

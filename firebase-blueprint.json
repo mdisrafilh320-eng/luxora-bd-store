@@ -1,0 +1,169 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with personal details, addresses, role and preferences",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique user ID (matches Firebase Auth UID)" },
+        "name": { "type": "string", "maxLength": 100, "description": "Display name or full legal name" },
+        "email": { "type": "string", "maxLength": 150, "description": "Email address" },
+        "phoneNumber": { "type": "string", "maxLength": 20, "description": "Bangladeshi or international phone number" },
+        "photoURL": { "type": "string", "maxLength": 500, "description": "Profile picture URL" },
+        "role": { "type": "string", "enum": ["customer", "admin"], "description": "Role for authorization" },
+        "language": { "type": "string", "enum": ["en", "bn"], "description": "Preferred interface language" },
+        "membershipTier": { "type": "string", "enum": ["Standard", "Gold", "Platinum", "VIP Noir"], "description": "Loyalty tier" },
+        "savedAddresses": {
+          "type": "array",
+          "description": "List of saved shipping addresses"
+        },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last profile update timestamp" }
+      },
+      "required": ["id", "role", "language", "membershipTier", "createdAt", "updatedAt"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Luxury gadget or lifestyle item in the Luxora catalog",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique product SKU / ID" },
+        "nameEn": { "type": "string", "maxLength": 150, "description": "English product name" },
+        "nameBn": { "type": "string", "maxLength": 150, "description": "Bengali product name" },
+        "taglineEn": { "type": "string", "maxLength": 250, "description": "English tagline" },
+        "taglineBn": { "type": "string", "maxLength": 250, "description": "Bengali tagline" },
+        "descriptionEn": { "type": "string", "maxLength": 2000, "description": "Full English description" },
+        "descriptionBn": { "type": "string", "maxLength": 2000, "description": "Full Bengali description" },
+        "price": { "type": "number", "description": "Current selling price in BDT" },
+        "originalPrice": { "type": "number", "description": "Original MSRP before discount in BDT" },
+        "category": { "type": "string", "enum": ["audio", "wearables", "desk-charging", "apple-ecosystem", "photography", "lifestyle"], "description": "Primary product category" },
+        "brand": { "type": "string", "maxLength": 60, "description": "Brand manufacturer" },
+        "image": { "type": "string", "maxLength": 500, "description": "Main cover image URL" },
+        "gallery": { "type": "array", "description": "Additional gallery image URLs" },
+        "inStock": { "type": "boolean", "description": "Inventory stock availability flag" },
+        "stockCount": { "type": "number", "description": "Available stock quantity" },
+        "rating": { "type": "number", "description": "Average review rating (0.0 - 5.0)" },
+        "reviewsCount": { "type": "number", "description": "Total count of reviews" },
+        "isFeatured": { "type": "boolean", "description": "Whether product is displayed in featured highlights" },
+        "badge": { "type": "string", "enum": ["bestseller", "limited", "new"], "description": "Highlight badge tag" },
+        "specs": { "type": "object", "description": "Key technical specifications map" },
+        "warranty": { "type": "string", "maxLength": 120, "description": "Official warranty coverage text" },
+        "returnPolicy": { "type": "string", "maxLength": 120, "description": "Return policy summary" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Catalog registration timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last updated timestamp" }
+      },
+      "required": ["id", "nameEn", "nameBn", "price", "category", "brand", "image", "inStock", "stockCount", "createdAt", "updatedAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Product taxonomy collection",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Category slug / ID" },
+        "nameEn": { "type": "string", "maxLength": 80, "description": "English category name" },
+        "nameBn": { "type": "string", "maxLength": 80, "description": "Bengali category name" },
+        "slug": { "type": "string", "maxLength": 80, "description": "URL slug identifier" },
+        "order": { "type": "number", "description": "Sort order index" },
+        "isActive": { "type": "boolean", "description": "Whether category is active" }
+      },
+      "required": ["id", "nameEn", "nameBn", "slug", "order", "isActive"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer purchase transaction record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique Order ID (e.g. LUX-XXXXXX)" },
+        "userId": { "type": "string", "description": "Customer Auth UID or 'guest'" },
+        "customer": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "maxLength": 100 },
+            "phone": { "type": "string", "maxLength": 20 },
+            "email": { "type": "string", "maxLength": 150 },
+            "shippingAddress": { "type": "string", "maxLength": 300 },
+            "district": { "type": "string", "maxLength": 60 },
+            "notes": { "type": "string", "maxLength": 500 }
+          },
+          "required": ["name", "phone", "shippingAddress", "district"]
+        },
+        "items": { "type": "array", "description": "Line items ordered" },
+        "subtotal": { "type": "number", "description": "Subtotal in BDT" },
+        "deliveryCharge": { "type": "number", "description": "Shipping fee in BDT" },
+        "discount": { "type": "number", "description": "Discount applied in BDT" },
+        "totalAmount": { "type": "number", "description": "Final payable amount in BDT" },
+        "paymentMethod": { "type": "string", "enum": ["cod", "bkash", "nagad", "card"], "description": "Payment gateway or COD" },
+        "paymentStatus": { "type": "string", "enum": ["pending", "paid", "failed"], "description": "Payment settlement status" },
+        "orderStatus": { "type": "string", "enum": ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"], "description": "Order fulfillment lifecycle state" },
+        "trackingInfo": {
+          "type": "object",
+          "properties": {
+            "courier": { "type": "string", "maxLength": 60 },
+            "trackingCode": { "type": "string", "maxLength": 80 },
+            "estimatedDelivery": { "type": "string", "maxLength": 80 }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Order creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Order updated timestamp" }
+      },
+      "required": ["id", "userId", "customer", "items", "subtotal", "deliveryCharge", "totalAmount", "paymentMethod", "paymentStatus", "orderStatus", "createdAt", "updatedAt"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Authorized administrative user entry",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Auth UID" },
+        "email": { "type": "string", "maxLength": 150, "description": "Admin email" },
+        "role": { "type": "string", "enum": ["super_admin", "admin"], "description": "Admin role level" },
+        "assignedAt": { "type": "string", "format": "date-time", "description": "Assignment timestamp" }
+      },
+      "required": ["uid", "email", "role", "assignedAt"]
+    },
+    "PaymentSettings": {
+      "title": "PaymentSettings",
+      "description": "Dynamic MFS payment gateways configuration and payment rules",
+      "type": "object",
+      "properties": {
+        "gateways": {
+          "type": "object",
+          "description": "Map of MFS gateway configurations (bkash, nagad, rocket)"
+        },
+        "sendMoneyStrictRule": { "type": "boolean", "description": "Enforces Send Money Only badge and rules" },
+        "partialAdvanceAmount": { "type": "number", "description": "Advance delivery fee in BDT" },
+        "allowFullPayment": { "type": "boolean" },
+        "allowPartialAdvance": { "type": "boolean" },
+        "allowCod": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["gateways", "sendMoneyStrictRule", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "User" },
+      "description": "User profile records and private preferences"
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "Product" },
+      "description": "Public catalog product documents"
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "Category" },
+      "description": "Public category directory"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "Order" },
+      "description": "Customer order purchase records"
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "Admin" },
+      "description": "Authorized admin users lookup"
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "PaymentSettings" },
+      "description": "System-wide payment gateway and operational settings"
+    }
+  }
+}
