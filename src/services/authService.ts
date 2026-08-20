@@ -2,6 +2,8 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   signInAnonymously, 
   signOut, 
   sendPasswordResetEmail,
@@ -152,7 +154,7 @@ export async function registerWithEmail(
 }
 
 /**
- * 3. Google Social Sign-In (using Popup)
+ * 3. Google Social Sign-In (using Popup with Redirect fallback capability)
  */
 export async function signInWithGoogle(): Promise<UserProfile> {
   try {
@@ -168,9 +170,36 @@ export async function signInWithGoogle(): Promise<UserProfile> {
         `[Firebase Auth] Unauthorized Domain Error: "${currentHost}" is not listed under Authorized Domains in your Firebase Console (Project: ${auth.app.options.projectId || 'luxora-bd-8170f'}).\n` +
         `To fix: Go to Firebase Console -> Authentication -> Settings -> Authorized Domains -> Add "${currentHost}".`
       );
+    } else if (error?.code === 'auth/popup-blocked') {
+      console.warn('[Firebase Auth] Popup blocked by browser. Attempting redirect flow fallback...');
+      await signInWithRedirect(auth, googleProvider);
     }
     throw error;
   }
+}
+
+/**
+ * Google Sign-In with Full Page Redirect
+ */
+export async function signInWithGoogleRedirect(): Promise<void> {
+  await signInWithRedirect(auth, googleProvider);
+}
+
+/**
+ * Check for pending redirect result on app initialization
+ */
+export async function checkRedirectResult(): Promise<UserProfile | null> {
+  try {
+    const result = await getRedirectResult(auth);
+    if (result && result.user) {
+      return await syncUserProfile(result.user, {
+        role: result.user.email === 'mdisrafilh320@gmail.com' ? 'admin' : 'customer'
+      });
+    }
+  } catch (error) {
+    console.warn('[Firebase Auth] Redirect result check notice:', error);
+  }
+  return null;
 }
 
 /**

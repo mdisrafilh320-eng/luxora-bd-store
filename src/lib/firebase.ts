@@ -14,16 +14,13 @@ import {
 import { getStorage } from 'firebase/storage';
 import rawFirebaseConfig from '../../firebase-applet-config.json';
 
-// Dynamically resolve configuration supporting Vercel/Netlify environments & custom domains
+// Explicitly ensure official Firebase authDomain to avoid unauthorized domain mismatches on custom/Vercel hostnames
 const env = (import.meta as any)?.env || {};
 
 export const resolvedFirebaseConfig = {
   apiKey: env.VITE_FIREBASE_API_KEY || rawFirebaseConfig.apiKey,
-  authDomain: 
-    env.VITE_FIREBASE_AUTH_DOMAIN || 
-    'luxora-bd-8170f.firebaseapp.com' ||
-    rawFirebaseConfig.authDomain,
-  projectId: env.VITE_FIREBASE_PROJECT_ID || rawFirebaseConfig.projectId,
+  authDomain: 'luxora-bd-8170f.firebaseapp.com',
+  projectId: env.VITE_FIREBASE_PROJECT_ID || rawFirebaseConfig.projectId || 'focused-stack-7j1d7',
   storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || rawFirebaseConfig.storageBucket,
   messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || rawFirebaseConfig.messagingSenderId,
   appId: env.VITE_FIREBASE_APP_ID || rawFirebaseConfig.appId,
@@ -41,6 +38,8 @@ setPersistence(auth, browserLocalPersistence).catch((err) => {
 
 // Configure Google OAuth Provider
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('email');
+googleProvider.addScope('profile');
 googleProvider.setCustomParameters({
   prompt: 'select_account'
 });

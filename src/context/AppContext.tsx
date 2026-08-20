@@ -23,7 +23,8 @@ import {
   subscribeToAuthState,
   getUserProfile,
   syncUserProfile,
-  initRecaptcha
+  initRecaptcha,
+  checkRedirectResult
 } from '../services/authService';
 import { getProducts } from '../services/productService';
 import { paymentService, DEFAULT_PAYMENT_SETTINGS } from '../services/paymentService';
@@ -254,8 +255,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
-  // Subscribe to Firebase Auth changes
+  // Check redirect result and subscribe to Firebase Auth changes
   useEffect(() => {
+    // Check for incoming redirect sign-in result (e.g. from mobile / popup-blocked redirects)
+    checkRedirectResult()
+      .then((profile) => {
+        if (profile) {
+          setUser(profile);
+          try {
+            localStorage.setItem('luxora_user', JSON.stringify(profile));
+          } catch {}
+        }
+      })
+      .catch((err) => console.warn('Redirect check on mount:', err));
+
     const unsubscribe = subscribeToAuthState(async (fbUser) => {
       setIsAuthLoading(true);
       if (fbUser) {
