@@ -12,10 +12,26 @@ import {
   Firestore
 } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
-import firebaseConfig from '../../firebase-applet-config.json';
+import rawFirebaseConfig from '../../firebase-applet-config.json';
+
+// Dynamically resolve configuration supporting Vercel/Netlify environments & custom domains
+const env = (import.meta as any)?.env || {};
+
+export const resolvedFirebaseConfig = {
+  apiKey: env.VITE_FIREBASE_API_KEY || rawFirebaseConfig.apiKey,
+  authDomain: 
+    env.VITE_FIREBASE_AUTH_DOMAIN || 
+    'luxora-bd-8170f.firebaseapp.com' ||
+    rawFirebaseConfig.authDomain,
+  projectId: env.VITE_FIREBASE_PROJECT_ID || rawFirebaseConfig.projectId,
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || rawFirebaseConfig.storageBucket,
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || rawFirebaseConfig.messagingSenderId,
+  appId: env.VITE_FIREBASE_APP_ID || rawFirebaseConfig.appId,
+  firestoreDatabaseId: env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || rawFirebaseConfig.firestoreDatabaseId
+};
 
 // Initialize Firebase App singleton
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const app = !getApps().length ? initializeApp(resolvedFirebaseConfig) : getApp();
 
 // Initialize Auth
 export const auth = getAuth(app);
@@ -30,7 +46,7 @@ googleProvider.setCustomParameters({
 });
 
 // Initialize Firestore with custom database ID
-export const db: Firestore = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db: Firestore = getFirestore(app, resolvedFirebaseConfig.firestoreDatabaseId);
 
 // Initialize Cloud Storage
 export const storage = getStorage(app);

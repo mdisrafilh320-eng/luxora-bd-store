@@ -155,11 +155,22 @@ export async function registerWithEmail(
  * 3. Google Social Sign-In (using Popup)
  */
 export async function signInWithGoogle(): Promise<UserProfile> {
-  const cred = await signInWithPopup(auth, googleProvider);
-  const profile = await syncUserProfile(cred.user, {
-    role: cred.user.email === 'mdisrafilh320@gmail.com' ? 'admin' : 'customer'
-  });
-  return profile;
+  try {
+    const cred = await signInWithPopup(auth, googleProvider);
+    const profile = await syncUserProfile(cred.user, {
+      role: cred.user.email === 'mdisrafilh320@gmail.com' ? 'admin' : 'customer'
+    });
+    return profile;
+  } catch (error: any) {
+    if (error?.code === 'auth/unauthorized-domain') {
+      const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'unknown';
+      console.error(
+        `[Firebase Auth] Unauthorized Domain Error: "${currentHost}" is not listed under Authorized Domains in your Firebase Console (Project: ${auth.app.options.projectId || 'luxora-bd-8170f'}).\n` +
+        `To fix: Go to Firebase Console -> Authentication -> Settings -> Authorized Domains -> Add "${currentHost}".`
+      );
+    }
+    throw error;
+  }
 }
 
 /**

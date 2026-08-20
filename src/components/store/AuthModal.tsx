@@ -166,7 +166,14 @@ export const AuthModal: React.FC = () => {
       await signInWithGoogle();
     } catch (err: any) {
       console.error('Google Sign In Error:', err);
-      if (err.code !== 'auth/popup-closed-by-user') {
+      if (err.code === 'auth/unauthorized-domain') {
+        const host = typeof window !== 'undefined' ? window.location.hostname : '';
+        setErrorMessage(
+          language === 'bn'
+            ? `ডোমেইন অনুমোদন প্রয়োজন: "${host}" ডোমেইনটি ফায়ারবেস কনসোলে (Authorized Domains) তালিকায় যোগ করুন অথবা নিচে ইমেইল/পাসওয়ার্ড দিয়ে প্রবেশ করুন।`
+            : `Domain not authorized: Please add "${host}" to Firebase Console -> Authentication -> Settings -> Authorized Domains, or sign in using Email / Phone.`
+        );
+      } else if (err.code !== 'auth/popup-closed-by-user') {
         setErrorMessage(err.message || 'Google sign-in failed');
       }
     } finally {
