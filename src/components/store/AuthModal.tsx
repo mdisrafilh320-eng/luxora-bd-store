@@ -21,7 +21,7 @@ import { useApp } from '../../context/AppContext';
 import { ConfirmationResult, RecaptchaVerifier } from 'firebase/auth';
 
 type AuthTab = 'email' | 'phone' | 'social';
-type AuthMode = 'login' | 'register';
+type AuthMode = 'login' | 'register' | 'forgot_password';
 
 export const AuthModal: React.FC = () => {
   const {
@@ -30,6 +30,7 @@ export const AuthModal: React.FC = () => {
     user,
     loginWithEmail,
     registerWithEmail,
+    sendPasswordReset,
     signInWithGoogle,
     setupRecaptcha,
     sendPhoneOtp,
@@ -54,6 +55,7 @@ export const AuthModal: React.FC = () => {
 
   // Status & Confirmation
   const [isLoading, setIsLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [phoneStep, setPhoneStep] = useState<'input' | 'otp'>('input');
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
@@ -64,6 +66,7 @@ export const AuthModal: React.FC = () => {
     if (isAuthModalOpen) {
       setErrorMessage(null);
       setIsLoading(false);
+      setResetSent(false);
     }
   }, [isAuthModalOpen]);
 
@@ -76,6 +79,16 @@ export const AuthModal: React.FC = () => {
     setIsLoading(true);
 
     try {
+      if (authMode === 'forgot_password') {
+        if (!email.trim()) {
+          throw new Error(language === 'bn' ? 'দয়া করে আপনার ইমেইল দিন' : 'Please enter your email');
+        }
+        await sendPasswordReset(email.trim());
+        setResetSent(true);
+        setIsLoading(false);
+        return;
+      }
+
       if (authMode === 'login') {
         await loginWithEmail(email, password);
       } else {
@@ -87,10 +100,10 @@ export const AuthModal: React.FC = () => {
     } catch (err: any) {
       console.error('Email Auth Error:', err);
       let msg = err.message || 'Authentication failed';
-      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
-        msg = language === 'bn' ? 'ভুল ইমেইল অথবা পাসওয়ার্ড' : 'Invalid email or password';
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
+        msg = language === 'bn' ? 'ভুল ইমেইল অথবা পাসওয়ার্ড। পাসওয়ার্ড ভুলে গেলে নিচে রিসেট অপশন ব্যবহার করুন।' : 'Invalid email or password. You can reset your password below.';
       } else if (err.code === 'auth/email-already-in-use') {
-        msg = language === 'bn' ? 'এই ইমেইলটি ইতিমধ্যে ব্যবহৃত হয়েছে' : 'Email address is already in use';
+        msg = language === 'bn' ? 'এই ইমেইলটি দিয়ে ইতিমধ্যে অ্যাকাউন্ট খোলা আছে। দয়া করে সাইন ইন করুন।' : 'This email is already registered. Please sign in instead.';
       } else if (err.code === 'auth/weak-password') {
         msg = language === 'bn' ? 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে' : 'Password must be at least 6 characters';
       }
@@ -114,7 +127,6 @@ export const AuthModal: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // Initialize reCAPTCHA if not ready
       if (!recaptchaVerifierRef.current) {
         recaptchaVerifierRef.current = setupRecaptcha('recaptcha-container');
       }
@@ -307,59 +319,94 @@ export const AuthModal: React.FC = () => {
                 </div>
 
                 <h3 className="text-xl font-bold font-luxury text-white mb-1">
-                  {authMode === 'login' ? t('authTitle') : (language === 'bn' ? 'নতুন অ্যাকাউন্ট খুলুন' : 'Create Luxora Account')}
+                  {authMode === 'forgot_password'
+                    ? (language === 'bn' ? 'পাসওয়ার্ড পুনরুদ্ধার করুন' : 'Reset Your Password')
+                    : authMode === 'login' 
+                    ? t('authTitle') 
+                    : (language === 'bn' ? 'নতুন অ্যাকাউন্ট খুলুন' : 'Create Luxora Account')}
                 </h3>
                 <p className="text-xs text-gray-400 leading-relaxed mb-5 font-sans">
-                  {authMode === 'login' 
+                  {authMode === 'forgot_password'
+                    ? (language === 'bn' ? 'আপনার অ্যাকাউন্টের ইমেইল দিন। আমরা একটি পাসওয়ার্ড রিসেট লিংক পাঠাবো।' : 'Enter your registered email address to receive password reset instructions.')
+                    : authMode === 'login' 
                     ? t('authSubtitle') 
                     : (language === 'bn' ? 'বাংলাদেশের সবচেয়ে বিশ্বস্ত লাক্সারি গ্যাজেট মেম্বারশিপে যোগ দিন।' : 'Unlock priority concierge dispatch, rewards, and order tracking.')}
                 </p>
 
                 {/* Tab Selectors */}
-                <div className="flex rounded-xl bg-black/50 p-1 border border-white/5 mb-5">
-                  <button
-                    type="button"
-                    onClick={() => { setActiveTab('email'); setErrorMessage(null); }}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                      activeTab === 'email'
-                        ? 'slate-bg gold-text border border-white/10 shadow-sm'
-                        : 'text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    <Mail className="w-3.5 h-3.5" />
-                    <span>Email</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setActiveTab('phone'); setErrorMessage(null); }}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                      activeTab === 'phone'
-                        ? 'slate-bg gold-text border border-white/10 shadow-sm'
-                        : 'text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    <Smartphone className="w-3.5 h-3.5" />
-                    <span>Phone OTP</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setActiveTab('social'); setErrorMessage(null); }}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                      activeTab === 'social'
-                        ? 'slate-bg gold-text border border-white/10 shadow-sm'
-                        : 'text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    <Globe className="w-3.5 h-3.5" />
-                    <span>Social / Guest</span>
-                  </button>
-                </div>
+                {authMode !== 'forgot_password' && (
+                  <div className="flex rounded-xl bg-black/50 p-1 border border-white/5 mb-5">
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab('email'); setErrorMessage(null); }}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        activeTab === 'email'
+                          ? 'slate-bg gold-text border border-white/10 shadow-sm'
+                          : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      <Mail className="w-3.5 h-3.5" />
+                      <span>Email</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab('phone'); setErrorMessage(null); }}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        activeTab === 'phone'
+                          ? 'slate-bg gold-text border border-white/10 shadow-sm'
+                          : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      <Smartphone className="w-3.5 h-3.5" />
+                      <span>Phone OTP</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab('social'); setErrorMessage(null); }}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        activeTab === 'social'
+                          ? 'slate-bg gold-text border border-white/10 shadow-sm'
+                          : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      <Globe className="w-3.5 h-3.5" />
+                      <span>Social / Guest</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Reset Link Success Banner */}
+                {resetSent && (
+                  <div className="mb-4 p-3 rounded-xl bg-emerald-950/40 border border-emerald-800/50 flex items-start gap-2 text-xs text-emerald-200">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <span>
+                      {language === 'bn'
+                        ? 'পাসওয়ার্ড রিসেট লিংক আপনার ইমেইলে পাঠানো হয়েছে। ইনবক্স অথবা স্প্যাম ফোল্ডার চেক করুন।'
+                        : 'A password reset link has been sent to your email. Please check your inbox or spam folder.'}
+                    </span>
+                  </div>
+                )}
 
                 {/* Error Banner */}
                 {errorMessage && (
                   <div className="mb-4 p-3 rounded-xl bg-red-950/40 border border-red-800/50 flex items-start gap-2 text-xs text-red-200">
                     <ShieldAlert className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                    <span>{errorMessage}</span>
+                    <div className="flex-1">
+                      <span>{errorMessage}</span>
+                      {errorMessage.includes('ইতিমধ্যে') || errorMessage.includes('already registered') ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAuthMode('login');
+                            setActiveTab('email');
+                            setErrorMessage(null);
+                          }}
+                          className="block mt-1.5 text-xs gold-text underline font-semibold hover:brightness-125 cursor-pointer"
+                        >
+                          {language === 'bn' ? '→ সাইন ইন ট্যাবে যান' : '→ Go to Sign In tab'}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 )}
 
@@ -398,20 +445,37 @@ export const AuthModal: React.FC = () => {
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-[11px] uppercase tracking-wider font-semibold text-gray-400 mb-1">
-                        Password
-                      </label>
-                      <input
-                        type="password"
-                        required
-                        minLength={6}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="••••••••"
-                        className="w-full bg-[#0A0A0C] border border-[#1E1E24] focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder:text-gray-600 outline-none transition-colors"
-                      />
-                    </div>
+                    {authMode !== 'forgot_password' && (
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="block text-[11px] uppercase tracking-wider font-semibold text-gray-400">
+                            Password
+                          </label>
+                          {authMode === 'login' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAuthMode('forgot_password');
+                                setErrorMessage(null);
+                                setResetSent(false);
+                              }}
+                              className="text-[10px] text-gray-400 hover:text-[#D4AF37] transition-colors cursor-pointer"
+                            >
+                              {language === 'bn' ? 'পাসওয়ার্ড ভুলে গেছেন?' : 'Forgot password?'}
+                            </button>
+                          )}
+                        </div>
+                        <input
+                          type="password"
+                          required
+                          minLength={6}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full bg-[#0A0A0C] border border-[#1E1E24] focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder:text-gray-600 outline-none transition-colors"
+                        />
+                      </div>
+                    )}
 
                     {authMode === 'register' && (
                       <div>
@@ -437,25 +501,46 @@ export const AuthModal: React.FC = () => {
                         <Loader2 className="w-4 h-4 animate-spin text-black" />
                       ) : (
                         <>
-                          <span>{authMode === 'login' ? t('continueBtn') : (language === 'bn' ? 'অ্যাকাউন্ট রেজিস্টার করুন' : 'Register Profile')}</span>
+                          <span>
+                            {authMode === 'forgot_password'
+                              ? (language === 'bn' ? 'রিসেট লিংক পাঠান' : 'Send Reset Link')
+                              : authMode === 'login'
+                              ? t('continueBtn') 
+                              : (language === 'bn' ? 'অ্যাকাউন্ট রেজিস্টার করুন' : 'Register Profile')}
+                          </span>
                           <ArrowRight className="w-4 h-4" />
                         </>
                       )}
                     </button>
 
                     <div className="text-center pt-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAuthMode(authMode === 'login' ? 'register' : 'login');
-                          setErrorMessage(null);
-                        }}
-                        className="text-xs text-gray-400 hover:text-[#D4AF37] transition-colors cursor-pointer"
-                      >
-                        {authMode === 'login' 
-                          ? (language === 'bn' ? 'নতুন ব্যবহারকারী? এখানে সাইন আপ করুন' : "Don't have an account? Sign up")
-                          : (language === 'bn' ? 'ইতিমধ্যে অ্যাকাউন্ট আছে? সাইন ইন করুন' : 'Already have an account? Sign in')}
-                      </button>
+                      {authMode === 'forgot_password' ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAuthMode('login');
+                            setErrorMessage(null);
+                            setResetSent(false);
+                          }}
+                          className="text-xs text-gray-400 hover:text-[#D4AF37] transition-colors cursor-pointer"
+                        >
+                          {language === 'bn' ? '← সাইন ইন পেজে ফিরে যান' : '← Back to Sign In'}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAuthMode(authMode === 'login' ? 'register' : 'login');
+                            setErrorMessage(null);
+                            setResetSent(false);
+                          }}
+                          className="text-xs text-gray-400 hover:text-[#D4AF37] transition-colors cursor-pointer"
+                        >
+                          {authMode === 'login' 
+                            ? (language === 'bn' ? 'নতুন ব্যবহারকারী? এখানে সাইন আপ করুন' : "Don't have an account? Sign up")
+                            : (language === 'bn' ? 'ইতিমধ্যে অ্যাকাউন্ট আছে? সাইন ইন করুন' : 'Already have an account? Sign in')}
+                        </button>
+                      )}
                     </div>
                   </form>
                 )}

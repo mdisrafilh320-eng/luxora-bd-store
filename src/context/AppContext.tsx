@@ -20,6 +20,7 @@ import {
   verifyPhoneOtp as fbVerifyPhoneOtp,
   signInAsGuest as fbSignInAsGuest,
   logoutUser as fbLogoutUser,
+  sendPasswordReset as fbSendPasswordReset,
   subscribeToAuthState,
   getUserProfile,
   syncUserProfile,
@@ -73,6 +74,7 @@ interface AppContextType {
   setIsAuthModalOpen: (open: boolean) => void;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
   registerWithEmail: (name: string, email: string, pass: string, phone?: string) => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   setupRecaptcha: (containerId: string) => RecaptchaVerifier;
   sendPhoneOtp: (phoneNumber: string, verifier: RecaptchaVerifier) => Promise<ConfirmationResult>;
@@ -334,6 +336,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       titleBn: 'অ্যাকাউন্ট তৈরি সম্পন্ন',
       descriptionEn: `Welcome to Luxora Privilege Club, ${profile.name}.`,
       descriptionBn: `লাক্সোরাতে আপনাকে স্বাগতম, ${profile.name}।`,
+    });
+  };
+
+  const handleSendPasswordReset = async (email: string) => {
+    await fbSendPasswordReset(email);
+    addToast({
+      type: 'info',
+      titleEn: 'Password Reset Link Sent',
+      titleBn: 'পাসওয়ার্ড রিসেট লিংক পাঠানো হয়েছে',
+      descriptionEn: `A recovery link has been sent to ${email}.`,
+      descriptionBn: `${email} ঠিকানায় রিকভারি লিংক পাঠানো হয়েছে।`,
     });
   };
 
@@ -611,6 +624,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsAuthModalOpen,
         loginWithEmail: handleLoginWithEmail,
         registerWithEmail: handleRegisterWithEmail,
+        sendPasswordReset: handleSendPasswordReset,
         signInWithGoogle: handleSignInWithGoogle,
         setupRecaptcha: handleSetupRecaptcha,
         sendPhoneOtp: handleSendPhoneOtp,

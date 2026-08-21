@@ -127,7 +127,8 @@ export async function syncUserProfile(
  * 1. Email/Password Login
  */
 export async function loginWithEmail(email: string, pass: string): Promise<UserProfile> {
-  const cred = await signInWithEmailAndPassword(auth, email.trim(), pass);
+  const cleanEmail = email.trim().toLowerCase();
+  const cred = await signInWithEmailAndPassword(auth, cleanEmail, pass);
   const profile = await syncUserProfile(cred.user);
   return profile;
 }
@@ -142,7 +143,8 @@ export async function registerWithEmail(
   phoneNumber: string = '',
   language: Language = 'en'
 ): Promise<UserProfile> {
-  const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
+  const cleanEmail = email.trim().toLowerCase();
+  const cred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
   await updateProfile(cred.user, { displayName: name.trim() });
   const profile = await syncUserProfile(cred.user, {
     name: name.trim(),
@@ -164,10 +166,18 @@ export async function signInWithGoogle(): Promise<UserProfile> {
     });
     return profile;
   } catch (error: any) {
-    if (error?.code === 'auth/unauthorized-domain') {
+    if (error?.code === 'auth/account-exists-with-different-credential') {
+      const email = error.customData?.email || '';
+      console.warn(`[Firebase Auth] Account exists with different credential for: ${email}`);
+      const err: any = new Error(
+        `এই ইমেইল (${email || 'Gmail'}) দিয়ে ইতিপূর্বেই পাসওয়ার্ড অ্যাকাউন্ট খোলা রয়েছে। অনুগ্রহ করে 'Email' ট্যাবে পাসওয়ার্ড দিয়ে লগইন করুন।`
+      );
+      err.code = 'auth/account-exists-with-different-credential';
+      throw err;
+    } else if (error?.code === 'auth/unauthorized-domain') {
       const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'unknown';
       console.error(
-        `[Firebase Auth] Unauthorized Domain Error: "${currentHost}" is not listed under Authorized Domains in your Firebase Console (Project: ${auth.app.options.projectId || 'luxora-bd-8170f'}).\n` +
+        `[Firebase Auth] Unauthorized Domain Error: "${currentHost}" is not listed under Authorized Domains in your Firebase Console (Project: ${auth.app.options.projectId || 'focused-stack-7j1d7'}).\n` +
         `To fix: Go to Firebase Console -> Authentication -> Settings -> Authorized Domains -> Add "${currentHost}".`
       );
     } else if (error?.code === 'auth/popup-blocked') {
