@@ -48,9 +48,9 @@ export const QUICK_SUGGESTIONS: QuickSuggestion[] = [
   },
   {
     id: 'contact-hotline',
-    textEn: 'Banani Showroom & WhatsApp',
-    textBn: 'বনানী শোরুম ও হোয়াটসঅ্যাপ',
-    query: 'আপনাদের বনানী শোরুমের ঠিকানা এবং হোয়াটসঅ্যাপ নম্বর দিন।'
+    textEn: 'Helpline & Office Address',
+    textBn: 'যোগাযোগ ও হেল্পলাইন',
+    query: 'আপনাদের হেল্পলাইন নম্বর, ইমেইল এবং অফিসের ঠিকানা জানতে চাই।'
   }
 ];
 
@@ -162,11 +162,21 @@ You will immediately receive your unique Order ID (e.g., **LUX-892014**).`;
 - 📜 **12 to 24 Months Official Warranty:** Complete with stamped warranty cards.`;
   }
 
-  if (q.includes('track') || q.includes('ট্র্যাক') || q.includes('কোথায়') || q.includes('stdf') || q.includes('lux-')) {
+  if (q.includes('contact') || q.includes('phone') || q.includes('hotline') || q.includes('address') || q.includes('email') || q.includes('ঠিকানা') || q.includes('ফোন') || q.includes('যোগাযোগ') || q.includes('হটলাইন') || q.includes('অফিস')) {
     if (isBn) {
-      return `আপনার অর্ডার ট্র্যাক করতে উপরের নেভিগেশন বারের **"Track Order"** বাটনে যান। সেখানে আপনার **Order ID (যেমন: LUX-892014)** অথবা মোবাইল নম্বরটি লিখলে লাইভ কুরিয়ার স্ট্যাটাস, সর্টিং হাব ও রাইডারের ফোন নম্বর দেখতে পাবেন।`;
+      return `**লুক্সোরা বিডি অফিশিয়াল যোগাযোগ তথ্য:**
+- 📞 **ফোন / হটলাইন:** ০১৮৭১৬৯৩০৫০
+- 💬 **হোয়াটসঅ্যাপ:** ০১৮৭১৬৯৩০৫০
+- ✉️ **ইমেইল:** mdisrafilh320@gmail.com
+- 📍 **অফিসের ঠিকানা:** ভোলা সদর, ভোলা, বাংলাদেশ
+- ⏰ **কাজের সময়:** প্রতিদিন সকাল ১০:০০ টা থেকে রাত ১০:০০ টা পর্যন্ত`;
     }
-    return `To track your order, navigate to the **"Track Order"** section and enter your **Order ID (e.g. LUX-892014)** or phone number to view live consignment milestones and assigned courier rider info.`;
+    return `**Luxora BD Official Contact Information:**
+- 📞 **Phone / Hotline:** 01871693050
+- 💬 **WhatsApp Helpline:** 01871693050
+- ✉️ **Email:** mdisrafilh320@gmail.com
+- 📍 **Office Address:** Bhola Sadar, Bhola, বাংলাদেশ
+- ⏰ **Working Hours:** Every day: 10:00 AM - 10:00 PM`;
   }
 
   if (isBn) {

@@ -53,18 +53,18 @@ export const CustomerSupportHub: React.FC = () => {
     {
       id: 'faq-3',
       category: 'payment',
-      questionEn: 'Can I pay via 100% Cash on Delivery (COD)?',
-      questionBn: 'আমি কি ১০০% ক্যাশ অন ডেলিভারিতে অর্ডার করতে পারব?',
-      answerEn: 'Yes! Luxora BD supports 100% Cash on Delivery nationwide. You can inspect the factory-sealed parcel upon arrival at your doorstep before paying the delivery agent.',
-      answerBn: 'অবশ্যই! লুক্সোরা বিডি সারাদেশে ১০০% ক্যাশ অন ডেলিভারি সুবিধা দেয়। পার্সেল আপনার ঠিকানায় পৌঁছানোর পর দেখে নিশ্চিন্তে ডেলিভারি রাইডারকে টাকা পরিশোধ করতে পারেন।',
+      questionEn: 'Is advance delivery charge mandatory for Cash on Delivery (COD)?',
+      questionBn: 'ক্যাশ অন ডেলিভারিতে অগ্রিম ডেলিভারি চার্জ দেওয়া কি বাধ্যতামূলক?',
+      answerEn: 'Yes. To secure parcel booking and prevent fraudulent orders, paying the courier delivery charge in advance via bKash or Nagad is strictly mandatory for all orders. The remaining product price is payable via Cash on Delivery after inspecting the parcel at your doorstep.',
+      answerBn: 'হ্যাঁ। অর্ডার কনফার্ম করতে এবং অনাকাঙ্ক্ষিত বাতিল এড়াতে বিকাশ বা নগদের মাধ্যমে কুরিয়ার ডেলিভারি চার্জ অগ্রিম পরিশোধ করা বাধ্যতামূলক। মূল পণ্যের মূল্য আপনি পার্সেল হাতে পেয়ে ডেলিভারিতে ক্যাশ পরিশোধ করবেন।',
     },
     {
       id: 'faq-4',
       category: 'payment',
-      questionEn: 'How does the Partial Advance Payment (Delivery Fee only) work?',
-      questionBn: 'আংশিক অগ্রিম (শুধু ডেলিভারি চার্জ) পেমেন্ট প্রক্রিয়াটি কী?',
-      answerEn: 'To secure non-serious order cancellations, you can optionally pay only the courier charge (৳70/৳100/৳120) via bKash or Nagad Merchant. The full product price remains payable at your doorstep upon arrival.',
-      answerBn: 'অর্ডার নিশ্চিত করতে আপনি চাইলে শুধুমাত্র কুরিয়ার ডেলিভারি চার্জটি (৳৭০/৳১০০/৳১২০) বিকাশ বা নগদ মার্চেন্টে পরিশোধ করতে পারেন। মূল পণ্যের টাকা ডেলিভারির সময় ক্যাশ পরিশোধ করলেই চলবে।',
+      questionEn: 'How can I contact customer support directly?',
+      questionBn: 'কাস্টমার কেয়ারে সরাসরি কীভাবে যোগাযোগ করব?',
+      answerEn: 'Our hotline and WhatsApp are available at 01871693050, email at mdisrafilh320@gmail.com, and physical location at Bhola Sadar, Bhola, Bangladesh. Working hours: Every day from 10:00 AM to 10:00 PM.',
+      answerBn: 'আমাদের হটলাইন ও হোয়াটসঅ্যাপ নম্বর: ০১৮৭১৬৯৩০৫০, ইমেইল: mdisrafilh320@gmail.com এবং অফিস: ভোলা সদর, ভোলা, বাংলাদেশ। প্রতিদিন সকাল ১০:০০ টা থেকে রাত ১০:০০ টা পর্যন্ত সেবা প্রদান করা হয়।',
     },
     {
       id: 'faq-5',
@@ -128,7 +128,7 @@ export const CustomerSupportHub: React.FC = () => {
           
           {/* WhatsApp Hotline */}
           <a
-            href="https://wa.me/8801700000000"
+            href="https://wa.me/8801871693050"
             target="_blank"
             rel="noreferrer"
             className="p-5 rounded-3xl bg-[#121218] border border-[#242434] hover:border-emerald-500/50 hover:bg-[#161622] transition-all group cursor-pointer block space-y-2"
@@ -137,44 +137,44 @@ export const CustomerSupportHub: React.FC = () => {
               <MessageSquare className="w-5 h-5" />
             </div>
             <h3 className="text-sm font-bold text-white font-luxury">WhatsApp Helpline</h3>
-            <p className="text-xs text-emerald-400 font-mono">+880 1700-000000</p>
-            <span className="text-[11px] text-gray-400 block">{language === 'bn' ? 'তাৎক্ষণিক চ্যাট ও কনফার্মেশন' : 'Instant 24/7 Chat & Ordering'}</span>
+            <p className="text-xs text-emerald-400 font-mono font-bold">01871693050</p>
+            <span className="text-[11px] text-gray-400 block">{language === 'bn' ? 'প্রতিদিন: সকাল ১০:০০ - রাত ১০:০০' : 'Every day: 10:00 AM - 10:00 PM'}</span>
           </a>
 
           {/* Voice Phone Call */}
           <a
-            href="tel:+8801700000000"
+            href="tel:01871693050"
             className="p-5 rounded-3xl bg-[#121218] border border-[#242434] hover:border-[#D4AF37]/50 hover:bg-[#161622] transition-all group cursor-pointer block space-y-2"
           >
             <div className="w-10 h-10 rounded-2xl bg-[#D4AF37]/10 border border-[#D4AF37]/30 text-[#D4AF37] flex items-center justify-center group-hover:scale-110 transition-transform">
               <Phone className="w-5 h-5" />
             </div>
-            <h3 className="text-sm font-bold text-white font-luxury">VIP Concierge Call</h3>
-            <p className="text-xs text-[#D4AF37] font-mono">+880 1700-LUXORA</p>
-            <span className="text-[11px] text-gray-400 block">{language === 'bn' ? 'সকাল ৯টা - রাত ১১টা' : '09:00 AM – 11:00 PM Daily'}</span>
+            <h3 className="text-sm font-bold text-white font-luxury">Hotline Support</h3>
+            <p className="text-xs text-[#D4AF37] font-mono font-bold">01871693050</p>
+            <span className="text-[11px] text-gray-400 block">{language === 'bn' ? 'প্রতিদিন: সকাল ১০:০০ - রাত ১০:০০' : 'Every day: 10:00 AM - 10:00 PM'}</span>
           </a>
 
           {/* Email Support */}
           <a
-            href="mailto:support@luxorabd.com"
+            href="mailto:mdisrafilh320@gmail.com"
             className="p-5 rounded-3xl bg-[#121218] border border-[#242434] hover:border-blue-500/50 hover:bg-[#161622] transition-all group cursor-pointer block space-y-2"
           >
             <div className="w-10 h-10 rounded-2xl bg-blue-950/40 border border-blue-800/40 text-blue-400 flex items-center justify-center group-hover:scale-110 transition-transform">
               <Mail className="w-5 h-5" />
             </div>
             <h3 className="text-sm font-bold text-white font-luxury">Official Email</h3>
-            <p className="text-xs text-blue-400 font-mono">support@luxorabd.com</p>
-            <span className="text-[11px] text-gray-400 block">{language === 'bn' ? 'কর্পোরেট ও ওয়ারেন্টি সেবা' : 'Corporate & Warranty Queries'}</span>
+            <p className="text-xs text-blue-400 font-mono font-medium truncate">mdisrafilh320@gmail.com</p>
+            <span className="text-[11px] text-gray-400 block">{language === 'bn' ? 'কর্পোরেট ও ওয়ারেন্টি সেবা' : 'Client Care & Inquiries'}</span>
           </a>
 
-          {/* Flagship Showroom */}
+          {/* Office / Showroom */}
           <div className="p-5 rounded-3xl bg-[#121218] border border-[#242434] space-y-2">
             <div className="w-10 h-10 rounded-2xl bg-purple-950/40 border border-purple-800/40 text-purple-400 flex items-center justify-center">
               <MapPin className="w-5 h-5" />
             </div>
-            <h3 className="text-sm font-bold text-white font-luxury">Banani Showroom</h3>
-            <p className="text-xs text-purple-300">Level 4, Plot 11, Road 11</p>
-            <span className="text-[11px] text-gray-400 block">Banani, Dhaka 1213</span>
+            <h3 className="text-sm font-bold text-white font-luxury">{language === 'bn' ? 'অফিস ঠিকানা' : 'Office Location'}</h3>
+            <p className="text-xs text-purple-300 font-medium">Bhola Sadar, Bhola</p>
+            <span className="text-[11px] text-gray-400 block">{language === 'bn' ? 'বাংলাদেশ' : 'Bangladesh'}</span>
           </div>
 
         </div>

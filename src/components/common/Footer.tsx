@@ -120,17 +120,29 @@ export const Footer: React.FC = () => {
 
             <div className="flex items-start gap-2.5">
               <MapPin className="w-4 h-4 text-[#D4AF37] shrink-0 mt-0.5" />
-              <span>{t('footerAddress')}</span>
+              <span className="leading-relaxed">{t('footerAddress')}</span>
             </div>
 
             <div className="flex items-center gap-2.5">
               <Phone className="w-4 h-4 text-[#D4AF37] shrink-0" />
-              <span className="font-sans font-semibold text-white">{t('footerHotline')}</span>
+              <a 
+                href="tel:01871693050" 
+                className="font-sans font-semibold text-white hover:text-[#D4AF37] transition-colors"
+                title="Call Hotline"
+              >
+                {t('footerHotline')}
+              </a>
             </div>
 
             <div className="flex items-center gap-2.5">
               <Mail className="w-4 h-4 text-[#D4AF37] shrink-0" />
-              <span>{t('footerEmail')}</span>
+              <a 
+                href="mailto:mdisrafilh320@gmail.com" 
+                className="hover:text-[#D4AF37] transition-colors"
+                title="Send Email"
+              >
+                {t('footerEmail')}
+              </a>
             </div>
 
             <div className="flex items-center gap-2.5">
@@ -168,17 +180,6 @@ export const Footer: React.FC = () => {
                 COD (Cash)
               </span>
             </div>
-          </div>
-        </div>
-
-        {/* Live Theme & State Telemetry Bar */}
-        <div className="mt-8 pt-4 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-2 text-[9px] font-mono text-gray-500 uppercase tracking-wider">
-          <div className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full gold-bg animate-pulse" />
-            <span>State: LANG_{language.toUpperCase()} | CART_{cartCount} | {user ? `AUTH_ACTIVE (${user.membershipTier})` : 'GUEST_SESSION'}</span>
-          </div>
-          <div className="text-gray-600">
-            THEME: ELEGANT DARK • LUXORA BD ARCHITECTURE
           </div>
         </div>
 

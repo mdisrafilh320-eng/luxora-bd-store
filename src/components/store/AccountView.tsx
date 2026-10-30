@@ -21,7 +21,7 @@ import { Order } from '../../types';
 import { formatBDT } from '../../translations';
 
 export const AccountView: React.FC = () => {
-  const { currentUser, userProfile, logout, setActiveView, language, t, addToast } = useApp();
+  const { currentUser, userProfile, logout, setActiveView, language, t, addToast, setIsAuthModalOpen } = useApp();
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(true);
   const [activeTab, setActiveTab] = useState<'orders' | 'profile' | 'addresses'>('orders');
@@ -45,22 +45,30 @@ export const AccountView: React.FC = () => {
   if (!currentUser) {
     return (
       <div className="w-full max-w-4xl mx-auto px-4 py-20 text-center">
-        <div className="card-bg border border-[#1E1E24] rounded-3xl p-12 max-w-md mx-auto">
+        <div className="card-bg border border-[#1E1E24] rounded-3xl p-8 sm:p-12 max-w-md mx-auto shadow-2xl">
           <User className="w-12 h-12 gold-text mx-auto mb-4" />
           <h2 className="text-xl font-bold text-white mb-2">
             {language === 'bn' ? 'সাইন ইন প্রয়োজন' : 'Sign In to Access VIP Club'}
           </h2>
-          <p className="text-xs text-gray-400 mb-6">
+          <p className="text-xs text-gray-400 mb-6 leading-relaxed">
             {language === 'bn'
-              ? 'আপনার অর্ডার ট্র্যাক এবং এক্সক্লুসিভ লাক্সারি প্রিভিলেজ দেখতে সাইন ইন করুন।'
-              : 'Sign in to view your real-time order tracking, address book, and VIP privileges.'}
+              ? 'আপনার অর্ডার ট্র্যাক, হিস্টোরি এবং এক্সক্লুসিভ লাক্সারি প্রিভিলেজ দেখতে সাইন ইন বা রেজিস্ট্রেশন করুন।'
+              : 'Sign in to view your real-time order tracking, order history, and VIP privileges.'}
           </p>
-          <button
-            onClick={() => setActiveView('store')}
-            className="gold-bg text-black font-bold text-xs uppercase tracking-widest py-3 px-8 rounded-full hover:brightness-110 cursor-pointer"
-          >
-            {language === 'bn' ? 'হোমে ফিরে যান' : 'Return to Boutique'}
-          </button>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              onClick={() => setIsAuthModalOpen(true)}
+              className="w-full sm:w-auto gold-bg text-black font-bold text-xs uppercase tracking-widest py-3 px-6 rounded-full hover:brightness-110 cursor-pointer shadow-lg"
+            >
+              {language === 'bn' ? 'সাইন ইন / রেজিস্ট্রেশন' : 'Sign In / Register'}
+            </button>
+            <button
+              onClick={() => setActiveView('store')}
+              className="w-full sm:w-auto slate-bg border border-white/10 text-gray-300 hover:text-white font-semibold text-xs py-3 px-6 rounded-full transition-colors cursor-pointer"
+            >
+              {language === 'bn' ? 'হোমে ফিরে যান' : 'Return to Boutique'}
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -295,16 +303,16 @@ export const AccountView: React.FC = () => {
             </p>
             <div className="space-y-2.5 text-xs text-gray-300">
               <div className="flex items-center gap-2">
-                <Phone className="w-4 h-4 gold-text" />
-                <span>Hotline: +880 1700-LUXORA (+880 1700-589672)</span>
+                <Phone className="w-4 h-4 gold-text shrink-0" />
+                <a href="tel:01871693050" className="hover:text-[#D4AF37] transition-colors">Hotline: 01871693050</a>
               </div>
               <div className="flex items-center gap-2">
-                <Mail className="w-4 h-4 gold-text" />
-                <span>Concierge: vip@luxorabd.com</span>
+                <Mail className="w-4 h-4 gold-text shrink-0" />
+                <a href="mailto:mdisrafilh320@gmail.com" className="hover:text-[#D4AF37] transition-colors truncate">Email: mdisrafilh320@gmail.com</a>
               </div>
               <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 gold-text" />
-                <span>Showroom: Level 4, Gulshan Avenue, Dhaka-1212</span>
+                <MapPin className="w-4 h-4 gold-text shrink-0" />
+                <span>Office: Bhola Sadar, Bhola, বাংলাদেশ</span>
               </div>
             </div>
           </div>

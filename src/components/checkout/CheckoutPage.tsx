@@ -113,14 +113,22 @@ export const CheckoutPage: React.FC = () => {
   const effectiveDeliveryCharge = appliedPromo === 'VIPFREESHIP' ? 0 : baseDeliveryCharge;
   const totalAmount = Math.max(0, cartSubtotal + effectiveDeliveryCharge - promoDiscount);
 
-  // Partial Payment breakdown
+  // STRICT MANDATORY ADVANCE DELIVERY CHARGE CALCULATION
+  // Default delivery fee: Dhaka Metro = 70 BDT, Outside Dhaka = 120 BDT
+  const fallbackDeliveryCharge = selectedDistrict.toLowerCase().includes('dhaka') ? 70 : 120;
+  const standardDeliveryFee = effectiveDeliveryCharge > 0 
+    ? effectiveDeliveryCharge 
+    : (paymentSettings?.partialAdvanceAmount || fallbackDeliveryCharge);
+
+  // Under mandatory delivery charge advance policy:
+  // Customers MUST pay at least the delivery charge (or standard advance deposit) upfront via MFS
   const advancePayableAmount = paymentOption === 'full_payment' 
     ? totalAmount 
-    : (paymentOption === 'partial_advance' ? (effectiveDeliveryCharge > 0 ? effectiveDeliveryCharge : (paymentSettings?.partialAdvanceAmount || 200)) : 0);
+    : Math.min(totalAmount, standardDeliveryFee);
 
   const dueOnDeliveryAmount = paymentOption === 'full_payment' 
     ? 0 
-    : (paymentOption === 'partial_advance' ? Math.max(0, totalAmount - advancePayableAmount) : totalAmount);
+    : Math.max(0, totalAmount - advancePayableAmount);
 
   // Active dynamic MFS gateway details
   const staticMfs = MFS_GATEWAYS[selectedMfs] || MFS_GATEWAYS.bkash;
@@ -223,7 +231,7 @@ export const CheckoutPage: React.FC = () => {
     }
   };
 
-  // Validation
+  // STRICT VALIDATION FOR ALL ORDERS
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
 
@@ -240,16 +248,33 @@ export const CheckoutPage: React.FC = () => {
       errors.fullAddress = language === 'bn' ? 'বাড়ি, রোড ও এলাকার বিস্তারিত ঠিকানা লিখুন' : 'Detailed delivery address (House/Road/Area) is required';
     }
 
-    if (paymentOption === 'full_payment' || paymentOption === 'partial_advance') {
-      if (!transactionId.trim()) {
-        errors.transactionId = language === 'bn' ? 'MFS ট্রানজেকশন আইডি (TrxID) প্রদান করুন' : 'Transaction ID (TrxID) is required for verification';
-      } else if (transactionId.trim().length < 6) {
-        errors.transactionId = language === 'bn' ? 'সঠিক ট্রানজেকশন আইডি দিন' : 'Please provide a valid TrxID';
-      }
+    // MANDATORY ADVANCE DELIVERY CHARGE / UPFRONT PAYMENT VALIDATION
+    const cleanTrx = transactionId.trim().toUpperCase();
+    if (!cleanTrx) {
+      errors.transactionId = language === 'bn' 
+        ? 'অগ্রিম ডেলিভারি চার্জের Transaction ID (TrxID) প্রদান করা বাধ্যতামূলক' 
+        : 'Advance delivery charge Transaction ID (TrxID) is strictly mandatory';
+    } else if (cleanTrx.length < 6) {
+      errors.transactionId = language === 'bn' 
+        ? 'কমপক্ষে ৬ অক্ষরের সঠিক TrxID দিন' 
+        : 'Please enter a valid TrxID (minimum 6 characters)';
+    }
 
-      if (!senderNumber.trim()) {
-        errors.senderNumber = language === 'bn' ? 'প্রেরকের মোবাইল নম্বর দিন' : 'Sender mobile number is required';
-      }
+    const cleanSender = senderNumber.replace(/[^0-9]/g, '');
+    if (!senderNumber.trim()) {
+      errors.senderNumber = language === 'bn' 
+        ? 'যে বিকাশ/নগদ/রকেট নম্বর থেকে অগ্রিম চার্জ পাঠিয়েছেন তা লিখুন (বাধ্যতামূলক)' 
+        : 'Sender mobile number used for advance payment is strictly mandatory';
+    } else if (cleanSender.length < 11) {
+      errors.senderNumber = language === 'bn' 
+        ? 'সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন (উদা: 017XXXXXXXX)' 
+        : 'Please provide a valid 11-digit Bangladeshi mobile number';
+    }
+
+    if (advancePayableAmount <= 0) {
+      errors.advanceAmount = language === 'bn'
+        ? 'অগ্রিম প্রদেয় চার্জ সঠিকভাবে নির্ধারিত হয়নি'
+        : 'Advance delivery fee must be greater than zero';
     }
 
     setFormErrors(errors);
@@ -301,11 +326,9 @@ export const CheckoutPage: React.FC = () => {
         }
       }
 
-      const paymentMethodValue: PaymentMethod = (paymentOption === 'full_payment' || paymentOption === 'partial_advance') 
-        ? selectedMfs 
-        : 'cod';
+      const paymentMethodValue: PaymentMethod = selectedMfs;
 
-      // Create Order in Firestore
+      // Create Order in Firestore with mandatory advance delivery fee
       const newOrder = await orderService.createOrder({
         userId: user?.id || 'guest',
         customer: {
@@ -337,11 +360,11 @@ export const CheckoutPage: React.FC = () => {
         paymentDetails: {
           method: paymentMethodValue,
           option: paymentOption,
-          mfsProvider: (paymentOption === 'full_payment' || paymentOption === 'partial_advance') ? selectedMfs : undefined,
+          mfsProvider: selectedMfs,
           advanceAmount: advancePayableAmount,
           dueAmount: dueOnDeliveryAmount,
-          senderNumber: senderNumber.trim() || undefined,
-          transactionId: transactionId.trim().toUpperCase() || undefined,
+          senderNumber: senderNumber.trim(),
+          transactionId: transactionId.trim().toUpperCase(),
           paymentProofUrl: uploadedProofUrl,
           paymentProofName: uploadedProofName,
           paymentTimestamp: new Date().toISOString(),
@@ -599,7 +622,7 @@ export const CheckoutPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Section 2: Flexible Payment Framework */}
+          {/* Section 2: Mandatory Advance Payment Scheme */}
           <div className="card-bg border border-[#22222E] rounded-2xl sm:rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl">
             <div className="flex items-center gap-3 pb-4 border-b border-[#20202A]">
               <div className="w-8 h-8 rounded-full gold-bg text-black flex items-center justify-center font-bold text-sm">
@@ -607,28 +630,57 @@ export const CheckoutPage: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-base sm:text-lg font-bold text-white font-sans">
-                  {language === 'bn' ? 'পেমেন্ট পদ্ধতি নির্বাচন করুন' : 'Flexible Payment Framework'}
+                  {language === 'bn' ? 'পেমেন্ট পদ্ধতি ও অগ্রিম ডেলিভারি চার্জ' : 'Payment Scheme & Advance Delivery Fee'}
                 </h3>
                 <p className="text-xs text-gray-400">
-                  {language === 'bn' ? 'সম্পূর্ণ অগ্রিম, আংশিক অগ্রিম চার্জ বা সিওডি নির্বাচন করুন' : 'Choose your preferred balance & settlement strategy'}
+                  {language === 'bn' ? 'ডেলিভারি চার্জ অগ্রিম পরিশোধ বাধ্যতামূলক (বাকি টাকা ক্যাশ অন ডেলিভারি)' : 'Advance delivery charge payment is mandatory for all orders'}
                 </p>
               </div>
             </div>
 
-            {/* Three Strategic Payment Scheme Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            {/* MANDATORY ADVANCE DELIVERY CHARGE BANNER */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-[#D4AF37]/15 via-[#1E1C16] to-[#D4AF37]/10 border-2 border-[#D4AF37]/50 shadow-xl flex items-start gap-3.5">
+              <div className="p-2.5 rounded-xl bg-[#D4AF37]/20 text-[#D4AF37] shrink-0 mt-0.5">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <div className="space-y-1.5 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-[#D4AF37] text-black">
+                    {language === 'bn' ? 'বাধ্যতামূলক পলিসি' : 'MANDATORY POLICY'}
+                  </span>
+                  <span className="text-xs sm:text-sm font-bold text-white font-sans">
+                    {language === 'bn' 
+                      ? 'ডেলিভারি চার্জ অগ্রিম পরিশোধ বাধ্যতামূলক' 
+                      : 'Advance Delivery Fee Payment is Strictly Mandatory'}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-300 leading-relaxed font-normal">
+                  {language === 'bn'
+                    ? 'ফেক অর্ডার প্রতিরোধ এবং পার্সেলের দ্রুততম এক্সপ্রেস কুরিয়ার বুকিং নিশ্চিত করতে প্রতিটি অর্ডারে ডেলিভারি চার্জ বিকাশ, নগদ বা রকেটে অগ্রিম প্রদান এবং TrxID দেওয়া বাধ্যতামূলক। মূল পণ্যের দাম ডেলিভারির সময় ক্যাশ অন ডেলিভারিতে পরিশোধ করবেন।'
+                    : 'To verify genuine customer intent and authorize express courier consignment, paying the delivery fee upfront via bKash, Nagad, or Rocket with a valid TrxID is required. The product balance is settled upon doorstep delivery.'}
+                </p>
+                <div className="pt-1 flex items-center gap-3 text-[11px] font-mono text-[#D4AF37]">
+                  <span>{language === 'bn' ? 'ঢাকা মেট্রো ডেলিভারি: ৳৭০' : 'Dhaka Metro: ৳70'}</span>
+                  <span>•</span>
+                  <span>{language === 'bn' ? 'সারাদেশে (৬৪ জেলা): ৳১২০' : 'Nationwide (64 Districts): ৳120'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Strategic Payment Scheme Cards: Only Advance Options Allowed */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               
-              {/* Option B: Partial Advance (RECOMMENDED) */}
+              {/* Option 1: Partial Advance (RECOMMENDED & DEFAULT) */}
               <div
                 onClick={() => setPaymentOption('partial_advance')}
-                className={`p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
+                className={`p-5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
                   paymentOption === 'partial_advance'
-                    ? 'card-bg gold-border shadow-lg shadow-[#D4AF37]/10'
+                    ? 'card-bg border-[#D4AF37] shadow-xl shadow-[#D4AF37]/15 ring-2 ring-[#D4AF37]/30'
                     : 'slate-bg border-[#22222E] hover:border-white/20'
                 }`}
               >
-                <div className="absolute top-0 right-0 px-2 py-0.5 rounded-bl-lg gold-bg text-black text-[9px] font-black uppercase tracking-wider">
-                  POPULAR
+                <div className="absolute top-0 right-0 px-2.5 py-1 rounded-bl-xl gold-bg text-black text-[9px] font-black uppercase tracking-wider">
+                  {language === 'bn' ? 'প্রস্তাবিত / POPULAR' : 'RECOMMENDED'}
                 </div>
                 <div className="flex items-center gap-2 mb-2">
                   <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
@@ -636,86 +688,85 @@ export const CheckoutPage: React.FC = () => {
                   }`}>
                     {paymentOption === 'partial_advance' && <div className="w-1.5 h-1.5 rounded-full bg-black" />}
                   </div>
-                  <span className="text-xs font-bold text-white">
-                    {language === 'bn' ? 'আংশিক অগ্রিম (স্মার্ট সিওডি)' : 'Advance Delivery Fee'}
+                  <span className="text-sm font-bold text-white">
+                    {language === 'bn' ? 'অগ্রিম ডেলিভারি চার্জ + ক্যাশ অন ডেলিভারি' : 'Advance Delivery Fee + COD'}
                   </span>
                 </div>
-                <p className="text-[11px] text-gray-400 leading-relaxed">
+                <p className="text-xs text-gray-300 leading-relaxed mb-3">
                   {language === 'bn'
-                    ? 'অর্ডার নিশ্চিত করতে শুধু ডেলিভারি চার্জ অগ্রিম দিন, বাকি টাকা প্রোডাক্ট হাতে পেয়ে পরিশোধ করুন।'
-                    : 'Pay only the shipping fee upfront to confirm booking; pay the product price on doorstep COD.'}
+                    ? 'শুধু ডেলিভারি চার্জ অগ্রিম পরিশোধ করে অর্ডার নিশ্চিত করুন। মূল পণ্যের দাম প্রোডাক্ট হাতে পেয়ে পরিশোধ করুন।'
+                    : 'Pay only the shipping fee upfront to lock your order; pay the product invoice upon doorstep delivery.'}
                 </p>
-                <div className="mt-3 pt-2 border-t border-white/5 flex justify-between text-[11px] font-mono">
-                  <span className="text-emerald-400 font-semibold">Pay Now: {formatBDT(advancePayableAmount, language)}</span>
+                <div className="pt-2.5 border-t border-white/10 flex flex-col gap-1 text-xs font-mono">
+                  <div className="flex justify-between text-emerald-400 font-bold">
+                    <span>{language === 'bn' ? 'এখন প্রদেয় (অগ্রিম চার্জ):' : 'Pay Now (Advance):'}</span>
+                    <span>{formatBDT(advancePayableAmount, language)}</span>
+                  </div>
+                  <div className="flex justify-between text-amber-400 font-semibold">
+                    <span>{language === 'bn' ? 'কুরিয়ারে প্রদেয় (বাকি মূল্য):' : 'Pay on Delivery (COD):'}</span>
+                    <span>{formatBDT(dueOnDeliveryAmount, language)}</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Option A: Full Upfront Payment */}
+              {/* Option 2: Full Upfront Payment */}
               <div
                 onClick={() => setPaymentOption('full_payment')}
-                className={`p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
+                className={`p-5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
                   paymentOption === 'full_payment'
-                    ? 'card-bg gold-border shadow-lg shadow-[#D4AF37]/10'
+                    ? 'card-bg border-[#D4AF37] shadow-xl shadow-[#D4AF37]/15 ring-2 ring-[#D4AF37]/30'
                     : 'slate-bg border-[#22222E] hover:border-white/20'
                 }`}
               >
+                <div className="absolute top-0 right-0 px-2.5 py-1 rounded-bl-xl bg-emerald-500 text-black text-[9px] font-black uppercase tracking-wider">
+                  VIP EXPRESS
+                </div>
                 <div className="flex items-center gap-2 mb-2">
                   <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
                     paymentOption === 'full_payment' ? 'border-[#D4AF37] bg-[#D4AF37]' : 'border-gray-500'
                   }`}>
                     {paymentOption === 'full_payment' && <div className="w-1.5 h-1.5 rounded-full bg-black" />}
                   </div>
-                  <span className="text-xs font-bold text-white">
-                    {language === 'bn' ? 'সম্পূর্ণ অগ্রিম পেমেন্ট' : '100% Full Payment'}
+                  <span className="text-sm font-bold text-white">
+                    {language === 'bn' ? '১০০% সম্পূর্ণ অগ্রিম পেমেন্ট' : '100% Full Payment Upfront'}
                   </span>
                 </div>
-                <p className="text-[11px] text-gray-400 leading-relaxed">
+                <p className="text-xs text-gray-300 leading-relaxed mb-3">
                   {language === 'bn'
-                    ? 'বিকাশ, নগদ বা রকেটের মাধ্যমে ১০০% পরিশোধ করে ভিআইপি অগ্রাধিকার ডিসপ্যাচ পান।'
-                    : 'Settle the entire invoice now via bKash/Nagad for instant express VIP dispatch.'}
+                    ? 'বিকাশ, নগদ বা রকেটের মাধ্যমে সম্পূর্ণ ইনভয়েস একবারে পরিশোধ করে অগ্রাধিকার এক্সপ্রেস ভিআইপি ডিসপ্যাচ উপভোগ করুন।'
+                    : 'Settle 100% of the invoice upfront for instant express VIP dispatch with zero cash handling upon arrival.'}
                 </p>
-                <div className="mt-3 pt-2 border-t border-white/5 flex justify-between text-[11px] font-mono">
-                  <span className="gold-text font-semibold">Pay Now: {formatBDT(totalAmount, language)}</span>
-                </div>
-              </div>
-
-              {/* Option C: Direct 100% Cash on Delivery */}
-              <div
-                onClick={() => setPaymentOption('cod')}
-                className={`p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
-                  paymentOption === 'cod'
-                    ? 'card-bg gold-border shadow-lg shadow-[#D4AF37]/10'
-                    : 'slate-bg border-[#22222E] hover:border-white/20'
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                    paymentOption === 'cod' ? 'border-[#D4AF37] bg-[#D4AF37]' : 'border-gray-500'
-                  }`}>
-                    {paymentOption === 'cod' && <div className="w-1.5 h-1.5 rounded-full bg-black" />}
+                <div className="pt-2.5 border-t border-white/10 flex flex-col gap-1 text-xs font-mono">
+                  <div className="flex justify-between gold-text font-bold">
+                    <span>{language === 'bn' ? 'এখন প্রদেয় (সম্পূর্ণ বিল):' : 'Pay Now (Full):'}</span>
+                    <span>{formatBDT(totalAmount, language)}</span>
                   </div>
-                  <span className="text-xs font-bold text-white">
-                    {language === 'bn' ? 'ক্যাশ অন ডেলিভারি' : 'Direct Cash on Delivery'}
-                  </span>
-                </div>
-                <p className="text-[11px] text-gray-400 leading-relaxed">
-                  {language === 'bn'
-                    ? 'ডেলিভারি এজেন্টের মাধ্যমে প্রোডাক্ট পাওয়ার পর সম্পূর্ণ মূল্য ক্যাশ পরিশোধ করুন।'
-                    : 'Pay 100% cash upon courier arrival following automated phone order validation.'}
-                </p>
-                <div className="mt-3 pt-2 border-t border-white/5 flex justify-between text-[11px] font-mono">
-                  <span className="text-gray-300">Pay on Delivery</span>
+                  <div className="flex justify-between text-gray-400 font-semibold">
+                    <span>{language === 'bn' ? 'কুরিয়ারে প্রদেয়:' : 'Pay on Delivery:'}</span>
+                    <span>{formatBDT(0, language)}</span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* MFS Verification Form (Shown when Full or Partial Advance is active) */}
-            {(paymentOption === 'full_payment' || paymentOption === 'partial_advance') && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                className="p-5 sm:p-6 rounded-2xl bg-[#121218] border border-[#2A2A36] space-y-5"
-              >
+            {/* Zero-advance COD Locked Notice */}
+            <div className="p-3.5 rounded-xl bg-black/40 border border-white/10 flex items-center gap-3 text-xs text-gray-400">
+              <div className="p-1.5 rounded-lg bg-white/5 text-gray-400 shrink-0">
+                <Lock className="w-4 h-4" />
+              </div>
+              <span className="leading-relaxed">
+                {language === 'bn'
+                  ? 'নিরাপত্তা বার্তা: অগ্রিম ডেলিভারি চার্জ ছাড়া সরাসরি ০% ক্যাশ অন ডেলিভারি (Zero-Advance COD) প্রযোজ্য নয়। পার্সেল ডেলিভারি নিশ্চিতে অন্তত ডেলিভারি চার্জ অগ্রিম পরিশোধ করতে হবে।'
+                  : 'Notice: Direct 0% advance Cash on Delivery is disabled. Paying the delivery fee in advance is strictly required for order confirmation.'}
+              </span>
+            </div>
+
+            {/* MFS Verification Form (Always Active & Mandatory) */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="p-5 sm:p-6 rounded-2xl bg-[#121218] border border-[#2A2A36] space-y-5"
+            >
                 {activeMfsList.length === 0 ? (
                   <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-500/30 text-center space-y-2">
                     <AlertTriangle className="w-6 h-6 text-amber-400 mx-auto" />
@@ -860,7 +911,7 @@ export const CheckoutPage: React.FC = () => {
                   {/* Sender Number */}
                   <div className="space-y-1.5">
                     <label className="block text-xs font-semibold text-gray-300">
-                      {language === 'bn' ? 'প্রেরকের মোবাইল নম্বর *' : 'Sender MFS Number *'}
+                      {language === 'bn' ? 'প্রেরকের মোবাইল নম্বর * (বাধ্যতামূলক)' : 'Sender MFS Number * (Mandatory)'}
                     </label>
                     <input
                       type="tel"
@@ -881,7 +932,7 @@ export const CheckoutPage: React.FC = () => {
                   {/* Transaction ID */}
                   <div className="space-y-1.5">
                     <label className="block text-xs font-semibold text-gray-300">
-                      {language === 'bn' ? 'ট্রানজেকশন আইডি (TrxID) *' : 'Transaction ID (TrxID) *'}
+                      {language === 'bn' ? 'ট্রানজেকশন আইডি (TrxID) * (বাধ্যতামূলক)' : 'Transaction ID (TrxID) * (Mandatory)'}
                     </label>
                     <input
                       type="text"
@@ -952,7 +1003,6 @@ export const CheckoutPage: React.FC = () => {
                   )}
                 </div>
               </motion.div>
-            )}
           </div>
         </div>
 
@@ -1087,10 +1137,12 @@ export const CheckoutPage: React.FC = () => {
                   <ShieldCheck className="w-4 h-4" />
                   <span>
                     {paymentOption === 'partial_advance'
-                      ? (language === 'bn' ? 'অগ্রিম চার্জ দিয়ে অর্ডার নিশ্চিত করুন' : 'Confirm Order with Advance Charge')
-                      : paymentOption === 'full_payment'
-                      ? (language === 'bn' ? 'সম্পূর্ণ পেমেন্টে অর্ডার সম্পন্ন করুন' : 'Complete Full Payment Order')
-                      : (language === 'bn' ? 'ক্যাশ অন ডেলিভারিতে অর্ডার নিশ্চিত করুন' : 'Confirm Cash on Delivery Order')}
+                      ? (language === 'bn' 
+                          ? `অগ্রিম ডেলিভারি চার্জ (${formatBDT(advancePayableAmount, language)}) দিয়ে অর্ডার নিশ্চিত করুন` 
+                          : `Confirm Order with Advance (${formatBDT(advancePayableAmount, language)})`)
+                      : (language === 'bn' 
+                          ? `সম্পূর্ণ পেমেন্টে (${formatBDT(totalAmount, language)}) অর্ডার সম্পন্ন করুন` 
+                          : `Complete Full Payment (${formatBDT(totalAmount, language)}) Order`)}
                   </span>
                 </>
               )}

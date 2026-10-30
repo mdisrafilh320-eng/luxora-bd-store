@@ -140,10 +140,10 @@ export const translations = {
     // Footer
     footerAbout: "Luxora BD is Bangladesh's premier destination for authenticated luxury consumer tech, artisanal lifestyle accessories, and minimalist workspace gear.",
     footerSupport: "Client Concierge",
-    footerHotline: "+880 9612-LUXORA (589672)",
-    footerEmail: "concierge@luxorabd.com",
-    footerAddress: "Level 4, Gulshan Luxury Promenade, Road 11, Dhaka 1212",
-    footerHours: "Sat - Thu: 10:00 AM - 9:00 PM",
+    footerHotline: "01871693050",
+    footerEmail: "mdisrafilh320@gmail.com",
+    footerAddress: "Bhola Sadar, Bhola, বাংলাদেশ",
+    footerHours: "Every day: 10:00 AM - 10:00 PM",
     footerCopyright: "© 2026 LUXORA BD Ltd. All rights reserved. Designed with Minimalist Luxury precision.",
     paymentMethods: "Accepted Payment Options in Bangladesh",
 
@@ -272,10 +272,10 @@ export const translations = {
     // Footer
     footerAbout: "লাক্সোরা বিডি বাংলাদেশের শীর্ষস্থানীয় অথেনটিক প্রিমিয়াম টেকনোলজি, নিখুঁত লাইফস্টাইল অ্যাক্সেসরিজ এবং ডেস্ক গ্যাজেটের বিশ্বস্ত প্ল্যাটফর্ম।",
     footerSupport: "কাস্টমার কনসিয়ার্জ",
-    footerHotline: "+৮৮০ ৯৬১২-LUXORA (৫৮৯৬৭২)",
-    footerEmail: "concierge@luxorabd.com",
-    footerAddress: "লেভেল ৪, গুলশান লাক্সারি প্রোমেনেড, রোড ১১, ঢাকা ১২১২",
-    footerHours: "শনিবার - বৃহস্পতিবার: সকাল ১০টা - রাত ৯টা",
+    footerHotline: "০১৮৭১৬৯৩০৫০",
+    footerEmail: "mdisrafilh320@gmail.com",
+    footerAddress: "ভোলা সদর, ভোলা, বাংলাদেশ",
+    footerHours: "প্রতিদিন: সকাল ১০:০০ - রাত ১০:০০",
     footerCopyright: "© ২০২৬ লাক্সোরা বিডি লিমিটেড। সর্বস্বত্ব সংরক্ষিত। মিনিমালিস্ট লাক্সারি আর্কিটেকচারে তৈরি।",
     paymentMethods: "বাংলাদেশে অনুমোদিত পেমেন্ট মাধ্যমসমূহ",
 

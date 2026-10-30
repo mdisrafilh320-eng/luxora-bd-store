@@ -54,11 +54,12 @@ Your Key Personality & Guidelines:
    - Desk Setups & MagSafe Charging (Nomad Base One, Anker Prime, Satechi Trio)
    - Apple Ecosystem (AirPods Max, MagSafe Wallets, Leather Cases)
    - Leica & Hasselblad Photography Gear
-   - Minimalist EDC & Desk Organizers
-8. Hotline & WhatsApp:
-   - WhatsApp Support: +880 1700-LUXORA (+880 1700-000000)
-   - Email: support@luxorabd.com
-   - Showroom: Level 4, Plot 11, Road 11, Banani, Dhaka.
+8. Hotline, Email & Business Info:
+   - Phone / Hotline: 01871693050
+   - WhatsApp Support: 01871693050
+   - Email: mdisrafilh320@gmail.com
+   - Address: Bhola Sadar, Bhola, বাংলাদেশ
+   - Working Hours: Every day: 10:00 AM - 10:00 PM
 
 Keep your replies concise, well-formatted with markdown/bullet points when appropriate, and always focus on solving the customer's request gracefully.`;
 
@@ -246,6 +247,23 @@ You will receive an instant Order ID (e.g. LUX-XXXXXX) to track live status.`;
       return `আপনার অর্ডার ট্র্যাক করতে আমাদের **"Track Order"** পেইজে যান এবং আপনার **Order ID (যেমন: LUX-XXXXXX)** অথবা মোবাইল নম্বরটি লিখুন। আপনি তাৎক্ষণিকভাবে পার্সেলের রিয়েল-টাইম লাইভ লোকেশন ও রাইডারের ফোন নম্বর দেখতে পাবেন।`;
     }
     return `To track your shipment, visit our **"Track Order"** section and enter your **Order ID (e.g. LUX-XXXXXX)** or Registered Mobile Number to view live courier milestones, hub dispatch times, and delivery rider details.`;
+  }
+
+  if (q.includes('contact') || q.includes('phone') || q.includes('hotline') || q.includes('address') || q.includes('email') || q.includes('ঠিকানা') || q.includes('ফোন') || q.includes('যোগাযোগ') || q.includes('হটলাইন') || q.includes('অফিস')) {
+    if (isBn) {
+      return `**লুক্সোরা বিডি অফিশিয়াল যোগাযোগ তথ্য:**
+- 📞 **হটলাইন / ফোন:** ০১৮৭১৬৯৩০৫০
+- 💬 **হোয়াটসঅ্যাপ:** ০১৮৭১৬৯৩০৫০
+- ✉️ **ইমেইল:** mdisrafilh320@gmail.com
+- 📍 **অফিস ঠিকানা:** ভোলা সদর, ভোলা, বাংলাদেশ
+- ⏰ **সেবার সময়:** প্রতিদিন সকাল ১০:০০ - রাত ১০:০০`;
+    }
+    return `**Luxora BD Official Business Details:**
+- 📞 **Phone / Hotline:** 01871693050
+- 💬 **WhatsApp:** 01871693050
+- ✉️ **Email:** mdisrafilh320@gmail.com
+- 📍 **Address:** Bhola Sadar, Bhola, বাংলাদেশ
+- ⏰ **Working Hours:** Every day: 10:00 AM - 10:00 PM`;
   }
 
   if (isBn) {

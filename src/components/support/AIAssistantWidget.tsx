@@ -94,8 +94,8 @@ export const AIAssistantWidget: React.FC = () => {
         id: `error-${Date.now()}`,
         sender: 'assistant',
         text: language === 'bn' 
-          ? 'দুঃখিত, সংযোগে কিছু সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন অথবা আমাদের হোয়াটসঅ্যাপে (+880 1700-000000) যোগাযোগ করুন।'
-          : 'I encountered an unexpected issue connecting to the server. Please try again or reach our WhatsApp helpline (+880 1700-000000).',
+          ? 'দুঃখিত, সংযোগে কিছু সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন অথবা আমাদের হোয়াটসঅ্যাপে (০১৮৭১৬৯৩০৫০) যোগাযোগ করুন।'
+          : 'I encountered an unexpected issue connecting to the server. Please try again or reach our WhatsApp helpline (01871693050).',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isError: true,
       };
@@ -351,12 +351,12 @@ export const AIAssistantWidget: React.FC = () => {
                   <div className="flex items-center justify-between text-[10px] text-gray-500 pt-1">
                     <div className="flex items-center gap-3">
                       <a
-                        href="https://wa.me/8801700000000"
+                        href="https://wa.me/8801871693050"
                         target="_blank"
                         rel="noreferrer"
-                        className="text-emerald-400 hover:underline flex items-center gap-1"
+                        className="text-emerald-400 hover:underline flex items-center gap-1 font-mono font-medium"
                       >
-                        <span>WhatsApp Helpline</span>
+                        <span>WhatsApp (01871693050)</span>
                       </a>
                       <span>•</span>
                       <button

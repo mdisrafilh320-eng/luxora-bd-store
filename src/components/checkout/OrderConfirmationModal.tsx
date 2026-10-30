@@ -303,7 +303,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
             {/* Print Footer Watermark */}
             <div className="hidden print:block pt-6 text-center text-xs text-gray-500 border-t border-gray-200">
               <p className="font-bold">Luxora BD - Minimalist Luxury Gadgets & Lifestyle</p>
-              <p>House 42, Road 11, Banani, Dhaka, Bangladesh • Helpline: +880 1700-589672</p>
+              <p>Bhola Sadar, Bhola, বাংলাদেশ • Hotline: 01871693050 • Email: mdisrafilh320@gmail.com • Hours: 10:00 AM - 10:00 PM</p>
               <p className="text-[10px] mt-1">Generated electronically on {new Date().toLocaleString()} - No physical signature required.</p>
             </div>
           </div>

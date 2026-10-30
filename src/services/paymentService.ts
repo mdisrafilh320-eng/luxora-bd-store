@@ -121,7 +121,7 @@ export const DEFAULT_PAYMENT_SETTINGS: PaymentSettings = {
   partialAdvanceAmount: 200,
   allowFullPayment: true,
   allowPartialAdvance: true,
-  allowCod: true,
+  allowCod: false, // 0-advance COD disabled by default: advance delivery charge is mandatory for all orders
   updatedAt: new Date().toISOString(),
 };
 
