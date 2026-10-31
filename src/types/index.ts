@@ -64,6 +64,7 @@ export interface UserAddress {
 }
 
 export type UserRole = 'customer' | 'admin';
+export type AdminRole = 'super_admin' | 'admin' | 'staff';
 export type MembershipTier = 'Standard' | 'Gold' | 'Platinum' | 'VIP Noir';
 
 export interface UserProfile {
@@ -73,6 +74,7 @@ export interface UserProfile {
   phoneNumber?: string;
   photoURL?: string;
   role: UserRole;
+  adminRole?: AdminRole;
   membershipTier: MembershipTier;
   language: Language;
   points: number;

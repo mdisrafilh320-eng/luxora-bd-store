@@ -7,8 +7,10 @@ import {
   UserProfile, 
   ToastMessage,
   Order,
-  PaymentSettings 
+  PaymentSettings,
+  AdminRole 
 } from '../types';
+import { adminRbacService, isSuperAdminEmail, PRIMARY_SUPER_ADMIN_EMAIL } from '../services/adminRbacService';
 import { translations } from '../translations';
 import { mockProducts } from '../data/mockProducts';
 import { validateFirestoreConnection } from '../lib/firebase';
@@ -102,6 +104,10 @@ interface AppContextType {
 
   // Enterprise Admin RBAC
   isAdmin: boolean;
+  isSuperAdmin: boolean;
+  adminRole: AdminRole | null;
+  isCheckingAdminStatus: boolean;
+  refreshAdminStatus: () => Promise<void>;
   setIsAdmin: (isAdmin: boolean) => void;
   toggleAdminRole: () => void;
 
@@ -501,36 +507,97 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeView, setActiveView] = useState<'store' | 'checkout' | 'track' | 'support' | 'design-system' | 'account' | 'admin'>('store');
 
   // Enterprise Admin RBAC State
-  const [isAdminManualOverride, setIsAdminManualOverride] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('luxora_admin_override') === 'true';
-    } catch {
-      return false;
-    }
+  const [adminRole, setAdminRole] = useState<AdminRole | null>(() => {
+    if (user?.email && isSuperAdminEmail(user.email)) return 'super_admin';
+    return null;
   });
+  const [isAdmin, setIsAdminState] = useState<boolean>(() => {
+    return Boolean(user?.email && isSuperAdminEmail(user.email));
+  });
+  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(() => {
+    return Boolean(user?.email && isSuperAdminEmail(user.email));
+  });
+  const [isCheckingAdminStatus, setIsCheckingAdminStatus] = useState<boolean>(false);
 
-  const isAdmin = Boolean(
-    isAdminManualOverride || 
-    user?.role === 'admin' || 
-    user?.email === 'mdisrafilh320@gmail.com'
-  );
+  // Eliminate any legacy localStorage overrides
+  useEffect(() => {
+    try {
+      localStorage.removeItem('luxora_admin_override');
+    } catch {}
+  }, []);
+
+  const verifyUserAdminStatus = useCallback(async (targetUser: UserProfile | null) => {
+    if (!targetUser || targetUser.isGuest) {
+      setIsAdminState(false);
+      setIsSuperAdmin(false);
+      setAdminRole(null);
+      setIsCheckingAdminStatus(false);
+      return;
+    }
+
+    if (isSuperAdminEmail(targetUser.email)) {
+      setIsAdminState(true);
+      setIsSuperAdmin(true);
+      setAdminRole('super_admin');
+      setIsCheckingAdminStatus(false);
+      return;
+    }
+
+    setIsCheckingAdminStatus(true);
+    try {
+      const res = await adminRbacService.verifyAdminAccess(targetUser.email, targetUser.id);
+      setIsAdminState(res.isAuthorized);
+      setIsSuperAdmin(res.isSuperAdmin);
+      setAdminRole(res.isAuthorized ? (res.role as AdminRole) : null);
+    } catch (err) {
+      console.warn('Error verifying admin authorization:', err);
+      setIsAdminState(false);
+      setIsSuperAdmin(false);
+      setAdminRole(null);
+    } finally {
+      setIsCheckingAdminStatus(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    verifyUserAdminStatus(user);
+  }, [user, verifyUserAdminStatus]);
+
+  const refreshAdminStatus = async () => {
+    await verifyUserAdminStatus(user);
+  };
 
   const setIsAdmin = (value: boolean) => {
-    setIsAdminManualOverride(value);
-    try {
-      localStorage.setItem('luxora_admin_override', String(value));
-    } catch {}
+    if (!isSuperAdmin && !isAdmin) {
+      addToast({
+        type: 'error',
+        titleEn: 'Admin Access Restricted',
+        titleBn: 'অ্যাডমিন এক্সেস সংরক্ষিত',
+        descriptionEn: 'You do not have permission to manually enable admin mode.',
+        descriptionBn: 'আপনার অ্যাকাউন্টে অ্যাডমিন মোড চালুর অনুমতি নেই।',
+      });
+      return;
+    }
+    setIsAdminState(value);
   };
 
   const toggleAdminRole = () => {
-    setIsAdmin(!isAdmin);
-    addToast({
-      type: 'info',
-      titleEn: !isAdmin ? 'Admin Mode Activated' : 'Admin Mode Deactivated',
-      titleBn: !isAdmin ? 'অ্যাডমিন মোড সক্রিয় হয়েছে' : 'অ্যাডমিন মোড নিষ্ক্রিয় হয়েছে',
-      descriptionEn: !isAdmin ? 'Enterprise ERP access granted' : 'Switched to customer view',
-      descriptionBn: !isAdmin ? 'এন্টারপ্রাইজ ইআরপি এক্সেস আনলক হয়েছে' : 'কাস্টমার ভিউতে ফিরে গেছেন',
-    });
+    if (!isAdmin) {
+      addToast({
+        type: 'error',
+        titleEn: 'Authentication Required',
+        titleBn: 'লগইন আবশ্যক',
+        descriptionEn: 'Please sign in with an authorized admin account to access ERP.',
+        descriptionBn: 'ইআরপি ব্যবহারে অনুমোদিত অ্যাডমিন অ্যাকাউন্ট দিয়ে সাইন ইন করুন।',
+      });
+      setActiveView('admin');
+      return;
+    }
+    if (activeView === 'admin') {
+      setActiveView('store');
+    } else {
+      setActiveView('admin');
+    }
   };
 
   // Payment Gateway Settings (Dynamic MFS)
@@ -643,6 +710,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         activeView,
         setActiveView,
         isAdmin,
+        isSuperAdmin,
+        adminRole,
+        isCheckingAdminStatus,
+        refreshAdminStatus,
         setIsAdmin,
         toggleAdminRole,
         paymentSettings,

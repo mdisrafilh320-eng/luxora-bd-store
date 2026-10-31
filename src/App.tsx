@@ -17,7 +17,7 @@ import { CheckoutPage } from './components/checkout/CheckoutPage';
 import { CourierTrackingView } from './components/tracking/CourierTrackingView';
 import { CustomerSupportHub } from './components/support/CustomerSupportHub';
 import { AIAssistantWidget } from './components/support/AIAssistantWidget';
-import { AdminERPView } from './components/admin/AdminERPView';
+import { AdminAccessGate } from './components/admin/AdminAccessGate';
 import { ToastContainer } from './components/ui/ToastContainer';
 import { SectionHeader } from './components/ui/SectionHeader';
 import { DesignSystemExplorer } from './components/design-system/DesignSystemExplorer';
@@ -116,7 +116,7 @@ const MainStoreContent: React.FC = () => {
   }, [activeView]);
 
   if (activeView === 'admin') {
-    return <AdminERPView />;
+    return <AdminAccessGate />;
   }
 
   if (activeView === 'design-system') {

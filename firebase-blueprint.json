@@ -110,15 +110,19 @@
     },
     "Admin": {
       "title": "Admin",
-      "description": "Authorized administrative user entry",
+      "description": "Authorized administrative user entry for Role-Based Access Control (RBAC)",
       "type": "object",
       "properties": {
-        "uid": { "type": "string", "description": "Auth UID" },
-        "email": { "type": "string", "maxLength": 150, "description": "Admin email" },
-        "role": { "type": "string", "enum": ["super_admin", "admin"], "description": "Admin role level" },
-        "assignedAt": { "type": "string", "format": "date-time", "description": "Assignment timestamp" }
+        "uid": { "type": "string", "description": "Auth UID if available" },
+        "email": { "type": "string", "maxLength": 150, "description": "Admin email address (canonical lowercase)" },
+        "name": { "type": "string", "maxLength": 100, "description": "Admin display name or title" },
+        "role": { "type": "string", "enum": ["super_admin", "admin", "staff"], "description": "Admin role level" },
+        "active": { "type": "boolean", "description": "Whether administrative access is active" },
+        "addedBy": { "type": "string", "maxLength": 150, "description": "Email of Super Admin who authorized this user" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Authorization timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last role change timestamp" }
       },
-      "required": ["uid", "email", "role", "assignedAt"]
+      "required": ["email", "role", "active", "createdAt"]
     },
     "PaymentSettings": {
       "title": "PaymentSettings",

@@ -31,7 +31,10 @@ import {
   ChevronRight,
   Printer,
   Sliders,
-  Wallet
+  Wallet,
+  Crown,
+  LogOut,
+  UserCheck
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Order, Product, OrderStatus, PaymentStatus, ProductCategory } from '../../types';
@@ -46,12 +49,26 @@ import {
 } from '../../services/adminService';
 import { sanitizeInput, validateBangladeshiPhone, validateMfsTransactionId } from '../../utils/security';
 import { PaymentSettingsTab } from './PaymentSettingsTab';
+import { AdminManagementTab } from './AdminManagementTab';
 import { ProductImageUploader } from './ProductImageUploader';
+import { PRIMARY_SUPER_ADMIN_EMAIL } from '../../services/adminRbacService';
 
-type AdminTab = 'overview' | 'orders' | 'inventory' | 'finance' | 'payment_settings' | 'security';
+type AdminTab = 'overview' | 'orders' | 'inventory' | 'finance' | 'payment_settings' | 'team_rbac' | 'security';
 
 export const AdminERPView: React.FC = () => {
-  const { language, t, products, refreshProducts, addToast, isAdmin, toggleAdminRole, setActiveView } = useApp();
+  const { 
+    language, 
+    t, 
+    products, 
+    refreshProducts, 
+    addToast, 
+    isAdmin, 
+    isSuperAdmin,
+    adminRole,
+    user,
+    logout,
+    setActiveView 
+  } = useApp();
   
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [orders, setOrders] = useState<Order[]>([]);
@@ -321,10 +338,12 @@ export const AdminERPView: React.FC = () => {
     }
 
     try {
+      const sanitizedGallery = (productFormData.gallery || []).filter(u => u !== productFormData.image).slice(0, 4);
+
       if (editingProduct) {
         await productService.updateProduct(editingProduct.id, {
           ...productFormData,
-          gallery: productFormData.gallery || [],
+          gallery: sanitizedGallery,
         });
         addToast({
           type: 'success',
@@ -342,7 +361,7 @@ export const AdminERPView: React.FC = () => {
           originalPrice: Number(productFormData.originalPrice) || Number(productFormData.price) || 1000,
           stockCount: Number(productFormData.stockCount) || 10,
           inStock: (Number(productFormData.stockCount) || 0) > 0,
-          gallery: productFormData.gallery || [],
+          gallery: sanitizedGallery,
         });
         addToast({
           type: 'success',
@@ -432,29 +451,47 @@ export const AdminERPView: React.FC = () => {
 
           {/* Quick Actions & Role Guard Status */}
           <div className="flex flex-wrap items-center gap-3 relative z-10">
+            {/* Authenticated Identity Pill */}
+            {isSuperAdmin ? (
+              <div className="px-3 py-1.5 rounded-xl bg-[#D4AF37]/15 border border-[#D4AF37]/40 text-[#D4AF37] text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                <Crown className="w-3.5 h-3.5 text-[#D4AF37]" />
+                <span>Super Admin</span>
+                <span className="text-[10px] text-neutral-400 font-normal font-mono hidden sm:inline">({user?.email || PRIMARY_SUPER_ADMIN_EMAIL})</span>
+              </div>
+            ) : (
+              <div className="px-3 py-1.5 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 text-xs font-semibold flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>{adminRole === 'admin' ? 'Store Admin' : 'Fulfillment Staff'}</span>
+                <span className="text-[10px] text-neutral-400 font-normal font-mono hidden sm:inline">({user?.email})</span>
+              </div>
+            )}
+
             <button
               id="admin-refresh-btn"
               onClick={handleRefreshAll}
               disabled={isRefreshing}
-              className="px-4 py-2 rounded-xl text-xs font-medium bg-[#1A1C24] hover:bg-[#232632] border border-neutral-800 hover:border-[#D4AF37]/40 text-neutral-200 transition-all flex items-center gap-2"
+              className="px-3 py-2 rounded-xl text-xs font-medium bg-[#1A1C24] hover:bg-[#232632] border border-neutral-800 hover:border-[#D4AF37]/40 text-neutral-200 transition-all flex items-center gap-1.5"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-[#D4AF37] ${isRefreshing ? 'animate-spin' : ''}`} />
-              {language === 'bn' ? 'ডাটা রিফ্রেশ' : 'Sync ERP Data'}
+              <span className="hidden sm:inline">{language === 'bn' ? 'ডাটা রিফ্রেশ' : 'Sync ERP'}</span>
             </button>
 
             <button
-              id="admin-toggle-role-btn"
-              onClick={toggleAdminRole}
-              className="px-4 py-2 rounded-xl text-xs font-medium bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#D4AF37]/30 text-[#D4AF37] transition-all flex items-center gap-2"
+              onClick={async () => {
+                await logout();
+                setActiveView('store');
+              }}
+              className="px-3 py-2 rounded-xl text-xs font-medium bg-[#1A1C24] hover:bg-rose-950/30 border border-neutral-800 hover:border-rose-500/30 text-neutral-300 hover:text-rose-300 transition-all flex items-center gap-1.5 cursor-pointer"
+              title="Sign out of Admin Portal"
             >
-              <Key className="w-3.5 h-3.5" />
-              {isAdmin ? 'Admin Mode (Active)' : 'Activate Admin Access'}
+              <LogOut className="w-3.5 h-3.5" />
+              <span>{language === 'bn' ? 'লগআউট' : 'Sign Out'}</span>
             </button>
 
             <button
               id="admin-return-store-btn"
               onClick={() => setActiveView('store')}
-              className="px-4 py-2 rounded-xl text-xs font-medium bg-[#D4AF37] hover:bg-[#C5A028] text-black font-semibold transition-all flex items-center gap-1.5 shadow-lg shadow-[#D4AF37]/20"
+              className="px-4 py-2 rounded-xl text-xs font-medium bg-[#D4AF37] hover:bg-[#C5A028] text-black font-semibold transition-all flex items-center gap-1.5 shadow-lg shadow-[#D4AF37]/20 cursor-pointer active:scale-95"
             >
               {language === 'bn' ? 'গ্রাহক স্টোরে ফিরুন' : 'Back to Store'}
               <ArrowUpRight className="w-3.5 h-3.5" />
@@ -537,6 +574,28 @@ export const AdminERPView: React.FC = () => {
           >
             <Sliders className="w-4 h-4" />
             {language === 'bn' ? 'পেমেন্ট গেটওয়ে সেটিংস' : 'Payment Settings'}
+            {!isSuperAdmin && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] bg-neutral-800 text-neutral-400">
+                <Lock className="w-2.5 h-2.5" />
+                Read-Only
+              </span>
+            )}
+          </button>
+
+          <button
+            id="admin-tab-team-rbac"
+            onClick={() => setActiveTab('team_rbac')}
+            className={`min-h-[44px] px-5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer active:scale-95 ${
+              activeTab === 'team_rbac'
+                ? 'bg-[#D4AF37] text-black font-semibold shadow-lg shadow-[#D4AF37]/20'
+                : 'bg-[#12141A] text-neutral-400 hover:text-neutral-200 hover:bg-[#1A1C24] border border-neutral-800/60'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            {language === 'bn' ? 'টিম ও পারমিশন (RBAC)' : 'Team & Access (RBAC)'}
+            {isSuperAdmin && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            )}
           </button>
 
           <button
@@ -1377,6 +1436,11 @@ export const AdminERPView: React.FC = () => {
         {/* ----------------- TAB 6: MFS PAYMENT GATEWAY SETTINGS ----------------- */}
         {activeTab === 'payment_settings' && (
           <PaymentSettingsTab />
+        )}
+
+        {/* ----------------- TAB 7: ENTERPRISE TEAM & ACCESS CONTROL (RBAC) ----------------- */}
+        {activeTab === 'team_rbac' && (
+          <AdminManagementTab />
         )}
 
         {/* ----------------- PAYMENT VERIFICATION MODAL ----------------- */}

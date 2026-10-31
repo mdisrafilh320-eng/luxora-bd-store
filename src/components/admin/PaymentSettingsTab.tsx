@@ -21,7 +21,8 @@ import {
   HelpCircle,
   Eye,
   Sliders,
-  RotateCcw
+  RotateCcw,
+  Lock
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { PaymentSettings, MfsGatewayConfig, MfsAccountType } from '../../types';
@@ -36,6 +37,7 @@ export const PaymentSettingsTab: React.FC = () => {
     updatePaymentSettings, 
     refreshPaymentSettings, 
     isLoadingPaymentSettings,
+    isSuperAdmin,
     addToast 
   } = useApp();
 
@@ -117,6 +119,17 @@ export const PaymentSettingsTab: React.FC = () => {
   const handleSaveAll = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
+    if (!isSuperAdmin) {
+      addToast({
+        type: 'error',
+        titleEn: 'Super Admin Access Required',
+        titleBn: 'সুপার অ্যাডমিন এক্সেস আবশ্যক',
+        descriptionEn: 'Only the primary Super Admin (mdisrafilh320@gmail.com) is authorized to modify payment settings.',
+        descriptionBn: 'পেমেন্ট গেটওয়ে সেটিংস পরিবর্তন করার ক্ষমতা শুধুমাত্র সুপার অ্যাডমিনের আছে।',
+      });
+      return;
+    }
+
     if (!validateForm()) {
       addToast({
         type: 'error',
@@ -140,6 +153,16 @@ export const PaymentSettingsTab: React.FC = () => {
 
   // Reset to Defaults
   const handleResetDefaults = () => {
+    if (!isSuperAdmin) {
+      addToast({
+        type: 'error',
+        titleEn: 'Super Admin Access Required',
+        titleBn: 'সুপার অ্যাডমিন এক্সেস আবশ্যক',
+        descriptionEn: 'Only the Super Admin can reset payment configurations.',
+        descriptionBn: 'শুধুমাত্র সুপার অ্যাডমিন সেটিংস রিসেট করতে পারবেন।',
+      });
+      return;
+    }
     if (window.confirm(language === 'bn' ? 'আপনি কি ডিফল্ট পেমেন্ট সেটিংসে ফিরে যেতে চান?' : 'Are you sure you want to reset all payment settings to system defaults?')) {
       setFormData(DEFAULT_PAYMENT_SETTINGS);
       setFormErrors({});
@@ -168,15 +191,31 @@ export const PaymentSettingsTab: React.FC = () => {
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
               Firestore Cloud Synced
             </span>
+            {!isSuperAdmin && (
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                <Lock className="w-2.5 h-2.5" />
+                Read-Only (Super Admin Required)
+              </span>
+            )}
           </div>
           <h2 className="text-xl sm:text-2xl font-display font-bold text-white">
             {language === 'bn' ? 'এমএফএস পেমেন্ট গেটওয়ে কন্ট্রোল সেন্টার' : 'MFS Payment Gateway Control Center'}
           </h2>
           <p className="text-xs sm:text-sm text-gray-400 max-w-2xl leading-relaxed">
             {language === 'bn' 
-              ? 'বিকাশ, নগদ ও রকেট পেমেন্ট নম্বর, একাউন্ট টাইপ (পার্সোনাল/এজেন্ট) এবং সক্রিয়তা লাইভ পরিচালনা করুন। এখানে সেভ করা মাত্র গ্রাহক চেকআউটে তাৎক্ষণিক আপডেট হবে।'
-              : 'Dynamically configure bKash, Nagad, and Rocket numbers, account types, and toggle active status. Changes persist immediately to Firestore and sync in real-time across all customer checkout sessions.'}
+              ? 'বিকাশ, নগদ ও রকেট পেমেন্ট নম্বর, একাউন্ট টাইপ (পার্সোনাল/এজেন্ট) এবং সক্রিয়তা পরিচালনা করুন।'
+              : 'Dynamically configure bKash, Nagad, and Rocket numbers, account types, and toggle active status. Synced to Firestore in real time.'}
           </p>
+          {!isSuperAdmin && (
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200/90 flex items-center gap-2 mt-2">
+              <Lock className="w-4 h-4 shrink-0 text-amber-400" />
+              <span>
+                {language === 'bn'
+                  ? 'সতর্কতা: সাব-অ্যাডমিন/স্টাফ শুধুমাত্র সেটিংস দেখতে পারবেন। পরিবর্তন করার অনুমতি কেবল সুপার অ্যাডমিন (mdisrafilh320@gmail.com)-এর আছে।'
+                  : 'Notice: Staff members have read-only visibility. Core payment gateway modifications require Super Admin authentication.'}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Global Action Buttons */}
@@ -191,27 +230,41 @@ export const PaymentSettingsTab: React.FC = () => {
             {language === 'bn' ? 'রিফ্রেশ' : 'Sync Remote'}
           </button>
 
-          <button
-            type="button"
-            onClick={handleResetDefaults}
-            className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-[#1E2029] hover:bg-red-950/40 border border-white/10 hover:border-red-500/40 text-gray-300 hover:text-red-300 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            {language === 'bn' ? 'ডিফল্ট রিসেট' : 'Reset Defaults'}
-          </button>
+          {isSuperAdmin && (
+            <button
+              type="button"
+              onClick={handleResetDefaults}
+              className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-[#1E2029] hover:bg-red-950/40 border border-white/10 hover:border-red-500/40 text-gray-300 hover:text-red-300 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              {language === 'bn' ? 'ডিফল্ট রিসেট' : 'Reset Defaults'}
+            </button>
+          )}
 
           <button
             type="button"
             onClick={() => handleSaveAll()}
-            disabled={isSaving}
-            className="px-6 py-2.5 rounded-xl text-xs font-bold bg-[#D4AF37] hover:bg-[#C5A028] text-black transition-all flex items-center gap-2 shadow-lg shadow-[#D4AF37]/25 cursor-pointer active:scale-95 disabled:opacity-50"
+            disabled={isSaving || !isSuperAdmin}
+            className={`px-6 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-lg cursor-pointer active:scale-95 ${
+              isSuperAdmin 
+                ? 'bg-[#D4AF37] hover:bg-[#C5A028] text-black shadow-[#D4AF37]/25' 
+                : 'bg-neutral-800 text-neutral-500 cursor-not-allowed border border-neutral-700'
+            }`}
           >
             {isSaving ? (
               <RefreshCw className="w-4 h-4 animate-spin text-black" />
+            ) : !isSuperAdmin ? (
+              <Lock className="w-4 h-4 text-neutral-400" />
             ) : (
               <Save className="w-4 h-4 text-black" />
             )}
-            <span>{isSaving ? (language === 'bn' ? 'সংরক্ষণ হচ্ছে...' : 'Saving to Cloud...') : (language === 'bn' ? 'সেটিংস সংরক্ষণ করুন' : 'Save All Gateways')}</span>
+            <span>
+              {!isSuperAdmin 
+                ? (language === 'bn' ? 'লকড (সুপার অ্যাডমিন)' : 'Locked (Super Admin Only)')
+                : isSaving 
+                  ? (language === 'bn' ? 'সংরক্ষণ হচ্ছে...' : 'Saving to Cloud...') 
+                  : (language === 'bn' ? 'সেটিংস সংরক্ষণ করুন' : 'Save All Gateways')}
+            </span>
           </button>
         </div>
       </div>
