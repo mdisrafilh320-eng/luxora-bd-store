@@ -60,7 +60,9 @@ export const AdminERPView: React.FC = () => {
     language, 
     t, 
     products, 
-    refreshProducts, 
+    refreshProducts,
+    addProductToState,
+    removeProductFromState,
     addToast, 
     isAdmin, 
     isSuperAdmin,
@@ -93,6 +95,7 @@ export const AdminERPView: React.FC = () => {
   // Product CRUD Modal States
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
   const [productFormData, setProductFormData] = useState<Partial<Product>>({
     nameEn: '',
     nameBn: '',
@@ -306,8 +309,10 @@ export const AdminERPView: React.FC = () => {
       rating: 4.9,
       reviewsCount: 12,
       badge: 'new',
-      warranty: '2 Years Official Bangladesh Warranty',
-      returnPolicy: '7 Days Replacement Guarantee',
+      warrantyEn: '2 Years Official Luxora Warranty',
+      warrantyBn: '২ বছরের অফিসিয়াল লাক্সোরা ওয়ারেন্টি',
+      returnPolicyEn: '7 Days Replacement Guarantee',
+      returnPolicyBn: '৭ দিনের রিপ্লেসমেন্ট গ্যারান্টি',
     });
     setIsProductModalOpen(true);
   };
@@ -325,62 +330,107 @@ export const AdminERPView: React.FC = () => {
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Image validation: ensure at least 1 image is set as mainImage
-    if (!productFormData.image) {
+    // 1. Mandatory title validation
+    if (!productFormData.nameEn?.trim()) {
+      addToast({
+        type: 'error',
+        titleEn: 'Product Title Required',
+        titleBn: 'পণ্যের নাম আবশ্যক',
+        descriptionEn: 'Please enter a valid English product title.',
+        descriptionBn: 'অনুগ্রহ করে পণ্যের সঠিক ইংরেজি শিরোনাম লিখুন।',
+      });
+      return;
+    }
+
+    // 2. Image validation: ensure at least 1 image is set as main cover
+    if (!productFormData.image?.trim()) {
       addToast({
         type: 'error',
         titleEn: 'Product Image Required',
         titleBn: 'পণ্যের ছবি আবশ্যক',
-        descriptionEn: 'Please upload at least 1 image to serve as the product main cover.',
+        descriptionEn: 'Please upload or provide at least 1 image to serve as the product main cover.',
         descriptionBn: 'পণ্য ক্যাটালগে সংরক্ষণের পূর্বে অন্তত একটি প্রধান ছবি আপলোড করুন।',
       });
       return;
     }
 
+    // 3. Price validation
+    const parsedPrice = Number(productFormData.price) || 0;
+    if (parsedPrice <= 0) {
+      addToast({
+        type: 'error',
+        titleEn: 'Invalid Price',
+        titleBn: 'মূল্য নির্ধারণ করুন',
+        descriptionEn: 'Product price must be greater than 0 BDT.',
+        descriptionBn: 'পণ্যের মূল্য অবশ্যই ০ টাকার বেশি হতে হবে।',
+      });
+      return;
+    }
+
+    setIsSavingProduct(true);
+
     try {
-      const sanitizedGallery = (productFormData.gallery || []).filter(u => u !== productFormData.image).slice(0, 4);
+      const sanitizedGallery = (productFormData.gallery || [])
+        .filter((u) => u && u !== productFormData.image)
+        .slice(0, 4);
 
       if (editingProduct) {
-        await productService.updateProduct(editingProduct.id, {
+        const updated = await productService.updateProduct(editingProduct.id, {
           ...productFormData,
           gallery: sanitizedGallery,
         });
+
+        // Immediately update React context state so UI updates in real time
+        addProductToState(updated);
+
         addToast({
           type: 'success',
           titleEn: 'Product Updated',
           titleBn: 'পণ্য তথ্য আপডেট হয়েছে',
-          descriptionEn: `${productFormData.nameEn} catalog entry updated`,
-          descriptionBn: `${productFormData.nameBn} সফলভাবে আপডেট করা হয়েছে`,
+          descriptionEn: `${updated.nameEn} catalog entry updated successfully`,
+          descriptionBn: `${updated.nameBn} সফলভাবে আপডেট করা হয়েছে`,
         });
       } else {
-        const newProdId = productFormData.id || `lux-${Date.now().toString(36)}`;
-        await productService.addProduct({
-          ...(productFormData as Product),
+        const newProdId = productFormData.id || `lux-prod-${Date.now().toString(36)}`;
+        const saved = await productService.addProduct({
+          ...productFormData,
           id: newProdId,
-          price: Number(productFormData.price) || 1000,
-          originalPrice: Number(productFormData.originalPrice) || Number(productFormData.price) || 1000,
+          price: parsedPrice,
+          originalPrice: Number(productFormData.originalPrice) || parsedPrice,
           stockCount: Number(productFormData.stockCount) || 10,
           inStock: (Number(productFormData.stockCount) || 0) > 0,
           gallery: sanitizedGallery,
         });
+
+        // Immediately update React context state so new item appears instantly without refresh
+        addProductToState(saved);
+
         addToast({
           type: 'success',
           titleEn: 'New Product Registered',
           titleBn: 'নতুন পণ্য ক্যাটালগে যুক্ত হয়েছে',
-          descriptionEn: `${productFormData.nameEn} added to luxury catalog`,
-          descriptionBn: `${productFormData.nameBn} সফলভাবে যুক্ত হয়েছে`,
+          descriptionEn: `"${saved.nameEn}" successfully added to luxury catalog and available in store`,
+          descriptionBn: `"${saved.nameBn}" সফলভাবে ক্যাটালগে যুক্ত হয়েছে`,
         });
       }
+
+      // Close modal on verified success
       setIsProductModalOpen(false);
+
+      // Trigger background sync across catalog listeners
       await refreshProducts();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Product save error:', err);
+      const userMessage = err?.message || 'Database write failed. Please verify your admin authorization and connection.';
       addToast({
         type: 'error',
         titleEn: 'Failed to Save Product',
         titleBn: 'পণ্য সংরক্ষণে ব্যর্থ হয়েছে',
-        descriptionEn: 'Check database connectivity and permissions.',
+        descriptionEn: userMessage,
+        descriptionBn: 'ডাটাবেজে পণ্য সংরক্ষণ করা সম্ভব হয়নি। অনুগ্রহ করে আপনার অনুমোদন যাচাই করুন।',
       });
+    } finally {
+      setIsSavingProduct(false);
     }
   };
 
@@ -390,6 +440,7 @@ export const AdminERPView: React.FC = () => {
     }
     try {
       await productService.deleteProduct(productId);
+      removeProductFromState(productId);
       addToast({
         type: 'info',
         titleEn: 'Product Removed',
@@ -398,8 +449,14 @@ export const AdminERPView: React.FC = () => {
         descriptionBn: `${name} ক্যাটালগ থেকে বাদ দেওয়া হয়েছে`,
       });
       await refreshProducts();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Product delete error:', err);
+      addToast({
+        type: 'error',
+        titleEn: 'Failed to Delete Product',
+        titleBn: 'পণ্য মুছে ফেলা ব্যর্থ হয়েছে',
+        descriptionEn: err?.message || 'Could not delete product from Firestore catalog.',
+      });
     }
   };
 
@@ -1764,12 +1821,12 @@ export const AdminERPView: React.FC = () => {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-neutral-400 block mb-1">Warranty Info</label>
+                    <label className="text-neutral-400 block mb-1">Warranty Info (English)</label>
                     <input
                       type="text"
-                      value={productFormData.warranty || ''}
-                      onChange={(e) => setProductFormData({ ...productFormData, warranty: e.target.value })}
-                      placeholder="e.g. 2 Years Official Bangladesh Warranty"
+                      value={productFormData.warrantyEn || (productFormData as any).warranty || ''}
+                      onChange={(e) => setProductFormData({ ...productFormData, warrantyEn: e.target.value })}
+                      placeholder="e.g. 2 Years Official Luxora Warranty"
                       className="w-full px-3 py-2 bg-[#161822] border border-neutral-800 rounded-xl text-white focus:outline-none focus:border-[#D4AF37]"
                     />
                   </div>
@@ -1791,17 +1848,28 @@ export const AdminERPView: React.FC = () => {
                 <div className="flex items-center justify-end gap-3 pt-3 border-t border-neutral-800">
                   <button
                     type="button"
+                    disabled={isSavingProduct}
                     onClick={() => setIsProductModalOpen(false)}
-                    className="px-4 py-2 rounded-xl text-neutral-400 hover:text-white cursor-pointer"
+                    className="px-4 py-2 rounded-xl text-neutral-400 hover:text-white cursor-pointer disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-6 py-2.5 rounded-xl bg-[#D4AF37] hover:bg-[#C5A028] text-black font-bold shadow-lg shadow-[#D4AF37]/20 cursor-pointer active:scale-95 transition-all flex items-center gap-1.5"
+                    disabled={isSavingProduct}
+                    className="px-6 py-2.5 rounded-xl bg-[#D4AF37] hover:bg-[#C5A028] disabled:bg-[#D4AF37]/50 text-black font-bold shadow-lg shadow-[#D4AF37]/20 cursor-pointer active:scale-95 transition-all flex items-center gap-2"
                   >
-                    <Check className="w-4 h-4" />
-                    <span>Save Product to Catalog</span>
+                    {isSavingProduct ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin text-black" />
+                        <span>Saving to Cloud Catalog...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>Save Product to Catalog</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </form>

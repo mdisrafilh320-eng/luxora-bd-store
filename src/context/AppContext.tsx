@@ -29,7 +29,7 @@ import {
   initRecaptcha,
   checkRedirectResult
 } from '../services/authService';
-import { getProducts } from '../services/productService';
+import { getProducts, subscribeToProducts, getLocalCachedProducts } from '../services/productService';
 import { paymentService, DEFAULT_PAYMENT_SETTINGS } from '../services/paymentService';
 import { ConfirmationResult, RecaptchaVerifier } from 'firebase/auth';
 
@@ -44,6 +44,8 @@ interface AppContextType {
   products: Product[];
   isLoadingProducts: boolean;
   refreshProducts: () => Promise<void>;
+  addProductToState: (product: Product) => void;
+  removeProductFromState: (productId: string) => void;
 
   // Cart State
   cart: CartItem[];
@@ -176,15 +178,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // Products state (loaded from Firestore with local fallback)
-  const [products, setProducts] = useState<Product[]>(mockProducts);
+  // Products state (initialized from cached catalog, kept in sync in real time)
+  const [products, setProducts] = useState<Product[]>(() => getLocalCachedProducts());
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
+
+  // Optimistic state updater to display newly created/edited items immediately
+  const addProductToState = useCallback((newProduct: Product) => {
+    setProducts((prev) => {
+      const filtered = prev.filter((p) => p.id !== newProduct.id);
+      return [newProduct, ...filtered];
+    });
+  }, []);
+
+  const removeProductFromState = useCallback((productId: string) => {
+    setProducts((prev) => prev.filter((p) => p.id !== productId));
+  }, []);
 
   const refreshProducts = useCallback(async () => {
     setIsLoadingProducts(true);
     try {
       const data = await getProducts();
-      setProducts(data || []);
+      if (Array.isArray(data) && data.length > 0) {
+        setProducts(data);
+      }
     } catch (err) {
       console.warn('Failed to load products from Firestore:', err);
     } finally {
@@ -194,7 +210,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     validateFirestoreConnection();
+    // 1. Initial async refresh
     refreshProducts();
+
+    // 2. Real-time onSnapshot listener for instant updates across all sessions
+    const unsubscribe = subscribeToProducts((liveProducts) => {
+      if (Array.isArray(liveProducts) && liveProducts.length > 0) {
+        setProducts(liveProducts);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, [refreshProducts]);
 
   // Cart state (persisted, zero-state clean)
@@ -664,6 +692,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         products,
         isLoadingProducts,
         refreshProducts,
+        addProductToState,
+        removeProductFromState,
         cart,
         addToCart,
         removeFromCart,
