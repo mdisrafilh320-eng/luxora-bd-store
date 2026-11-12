@@ -126,14 +126,28 @@ export function subscribeToProducts(
           items.push(docSnap.data() as Product);
         });
 
-        // Merge with local cached products if any
+        // Always update with live cloud items
         if (items.length > 0) {
           setLocalCachedProducts(items);
           onUpdate(items);
         } else {
-          // If Firestore collection has no items yet, check cache
-          const cached = getLocalCachedProducts();
-          onUpdate(cached);
+          // If primary collection is empty, check alias collection
+          getDocs(collection(db, 'luxora-products'))
+            .then((altSnap) => {
+              if (!altSnap.empty) {
+                const altItems: Product[] = [];
+                altSnap.forEach((d) => altItems.push(d.data() as Product));
+                setLocalCachedProducts(altItems);
+                onUpdate(altItems);
+              } else {
+                const cached = getLocalCachedProducts();
+                onUpdate(cached);
+              }
+            })
+            .catch(() => {
+              const cached = getLocalCachedProducts();
+              onUpdate(cached);
+            });
         }
       },
       (error) => {
@@ -159,6 +173,19 @@ export async function getProducts(): Promise<Product[]> {
     const snap = await getDocs(colRef);
     
     if (snap.empty) {
+      // Check alias collection 'luxora-products'
+      try {
+        const altRef = collection(db, 'luxora-products');
+        const altSnap = await getDocs(altRef);
+        if (!altSnap.empty) {
+          const altItems: Product[] = [];
+          altSnap.forEach((docSnap) => {
+            altItems.push(docSnap.data() as Product);
+          });
+          setLocalCachedProducts(altItems);
+          return altItems;
+        }
+      } catch {}
       const cached = getLocalCachedProducts();
       return cached;
     }
@@ -272,10 +299,18 @@ export async function addProduct(productData: Partial<Product>): Promise<Product
   try {
     const docRef = doc(db, PRODUCTS_COLLECTION, cleanProduct.id);
     
-    // Save document to Firestore
+    // Save document to primary Firestore collection
     await setDoc(docRef, cleanProduct);
 
-    // Verify document was written by checking local / server snapshot
+    // Also mirror to alias collection 'luxora-products' for global compatibility
+    try {
+      const aliasRef = doc(db, 'luxora-products', cleanProduct.id);
+      await setDoc(aliasRef, cleanProduct);
+    } catch (aliasErr) {
+      console.warn('luxora-products mirror notice:', aliasErr);
+    }
+
+    // Verify document was written by checking snapshot
     const verifySnap = await getDoc(docRef);
     if (!verifySnap.exists()) {
       throw new Error(`Product document ${cleanProduct.id} was not confirmed in Firestore collection '${PRODUCTS_COLLECTION}'.`);
@@ -326,6 +361,11 @@ export async function updateProduct(productId: string, updates: Partial<Product>
     const docRef = doc(db, PRODUCTS_COLLECTION, cleanId);
     await setDoc(docRef, cleanProduct, { merge: true });
 
+    try {
+      const aliasRef = doc(db, 'luxora-products', cleanId);
+      await setDoc(aliasRef, cleanProduct, { merge: true });
+    } catch {}
+
     // Update local cache
     const currentCached = getLocalCachedProducts();
     const updated = currentCached.map((p) => (p.id === cleanId ? cleanProduct : p));
@@ -366,6 +406,19 @@ export async function updateProductStock(productId: string, newStock: number): P
       { merge: true }
     );
 
+    try {
+      const aliasRef = doc(db, 'luxora-products', cleanId);
+      await setDoc(
+        aliasRef,
+        {
+          stockCount: safeStock,
+          inStock: safeStock > 0,
+          updatedAt: now,
+        },
+        { merge: true }
+      );
+    } catch {}
+
     // Update local cache
     const currentCached = getLocalCachedProducts();
     const updated = currentCached.map((p) =>
@@ -385,6 +438,11 @@ export async function deleteProduct(productId: string): Promise<void> {
   try {
     const docRef = doc(db, PRODUCTS_COLLECTION, cleanId);
     await deleteDoc(docRef);
+
+    try {
+      const aliasRef = doc(db, 'luxora-products', cleanId);
+      await deleteDoc(aliasRef);
+    } catch {}
 
     // Remove from local cache
     const currentCached = getLocalCachedProducts();

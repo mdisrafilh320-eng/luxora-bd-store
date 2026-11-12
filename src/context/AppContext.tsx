@@ -198,7 +198,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsLoadingProducts(true);
     try {
       const data = await getProducts();
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         setProducts(data);
       }
     } catch (err) {
@@ -210,12 +210,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     validateFirestoreConnection();
-    // 1. Initial async refresh
+    // 1. Initial async refresh from live Firestore
     refreshProducts();
 
-    // 2. Real-time onSnapshot listener for instant updates across all sessions
+    // 2. Real-time onSnapshot listener for instant updates across all sessions worldwide
     const unsubscribe = subscribeToProducts((liveProducts) => {
-      if (Array.isArray(liveProducts) && liveProducts.length > 0) {
+      if (Array.isArray(liveProducts)) {
         setProducts(liveProducts);
       }
     });

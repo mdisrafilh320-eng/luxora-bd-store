@@ -118,10 +118,12 @@ export const DEFAULT_PAYMENT_SETTINGS: PaymentSettings = {
     },
   },
   sendMoneyStrictRule: true,
-  partialAdvanceAmount: 200,
+  partialAdvanceAmount: 120, // Default advance is the flat delivery charge 120 BDT
+  flatDeliveryCharge: 120, // Flat delivery charge across all Bangladesh (default 120 BDT)
+  deliveryCharge: 120,
   allowFullPayment: true,
   allowPartialAdvance: true,
-  allowCod: false, // 0-advance COD disabled by default: advance delivery charge is mandatory for all orders
+  allowCod: false, // 0-advance COD disabled: advance delivery charge is strictly required for all orders
   updatedAt: new Date().toISOString(),
 };
 
@@ -136,9 +138,16 @@ export async function getPaymentSettings(): Promise<PaymentSettings> {
 
     if (docSnap.exists()) {
       const data = docSnap.data() as Partial<PaymentSettings>;
+      const resolvedDeliveryFee = typeof data.flatDeliveryCharge === 'number'
+        ? data.flatDeliveryCharge
+        : (typeof data.deliveryCharge === 'number' ? data.deliveryCharge : 120);
+
       return {
         ...DEFAULT_PAYMENT_SETTINGS,
         ...data,
+        flatDeliveryCharge: resolvedDeliveryFee,
+        deliveryCharge: resolvedDeliveryFee,
+        partialAdvanceAmount: typeof data.partialAdvanceAmount === 'number' ? data.partialAdvanceAmount : resolvedDeliveryFee,
         gateways: {
           bkash: { ...DEFAULT_PAYMENT_SETTINGS.gateways.bkash, ...(data.gateways?.bkash || {}) },
           nagad: { ...DEFAULT_PAYMENT_SETTINGS.gateways.nagad, ...(data.gateways?.nagad || {}) },
@@ -224,9 +233,16 @@ export function subscribeToPaymentSettings(
     (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data() as Partial<PaymentSettings>;
+        const resolvedDeliveryFee = typeof data.flatDeliveryCharge === 'number'
+          ? data.flatDeliveryCharge
+          : (typeof data.deliveryCharge === 'number' ? data.deliveryCharge : 120);
+
         const merged: PaymentSettings = {
           ...DEFAULT_PAYMENT_SETTINGS,
           ...data,
+          flatDeliveryCharge: resolvedDeliveryFee,
+          deliveryCharge: resolvedDeliveryFee,
+          partialAdvanceAmount: typeof data.partialAdvanceAmount === 'number' ? data.partialAdvanceAmount : resolvedDeliveryFee,
           gateways: {
             bkash: { ...DEFAULT_PAYMENT_SETTINGS.gateways.bkash, ...(data.gateways?.bkash || {}) },
             nagad: { ...DEFAULT_PAYMENT_SETTINGS.gateways.nagad, ...(data.gateways?.nagad || {}) },

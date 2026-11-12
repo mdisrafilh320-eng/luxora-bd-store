@@ -115,6 +115,8 @@ export interface PaymentSettings {
   gateways: Record<'bkash' | 'nagad' | 'rocket', MfsGatewayConfig>;
   sendMoneyStrictRule: boolean;
   partialAdvanceAmount: number;
+  deliveryCharge?: number;
+  flatDeliveryCharge: number;
   allowFullPayment: boolean;
   allowPartialAdvance: boolean;
   allowCod: boolean;

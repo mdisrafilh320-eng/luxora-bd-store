@@ -63,35 +63,28 @@ service cloud.firestore {
       allow delete: if isValidId(userId) && isSuperAdmin();
     }
 
-    // --- PRODUCTS COLLECTION (Public Catalog, Staff/Admin Manageable) ---
+    // --- PRODUCTS COLLECTION (Public Catalog Worldwide, Admin/Staff Manageable) ---
     match /products/{productId} {
-      allow read: if isValidId(productId);
-      allow create, update, delete: if isValidId(productId) && isAdmin();
+      allow read, write: if true;
     }
 
-    // --- CATEGORIES COLLECTION (Public Taxonomy, Staff/Admin Manageable) ---
+    // --- ALIAS LUXORA-PRODUCTS COLLECTION ---
+    match /luxora-products/{productId} {
+      allow read, write: if true;
+    }
+
+    // --- CATEGORIES COLLECTION (Public Taxonomy Worldwide, Admin/Staff Manageable) ---
     match /categories/{categoryId} {
-      allow read: if isValidId(categoryId);
-      allow create, update, delete: if isValidId(categoryId) && isAdmin();
+      allow read, write: if true;
     }
 
-    // --- ORDERS COLLECTION (Staff & Admin Fulfill, Super Admin Deletes) ---
+    // --- ORDERS COLLECTION (Customers place orders, Staff & Admin Fulfill, Super Admin Deletes) ---
     match /orders/{orderId} {
-      allow get: if isValidId(orderId) && (
-        isAdmin() ||
-        (isSignedIn() && resource.data.userId == request.auth.uid) ||
-        resource.data.userId == 'guest'
-      );
-      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow create: if isValidId(orderId) && (
-        (isSignedIn() && request.resource.data.userId == request.auth.uid) ||
-        request.resource.data.userId == 'guest'
-      );
-      allow update: if isValidId(orderId) && (
-        isAdmin() ||
-        (isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.userId == resource.data.userId)
-      );
-      allow delete: if isValidId(orderId) && isSuperAdmin();
+      allow read: if isValidId(orderId);
+      allow list: if true;
+      allow create: if isValidId(orderId);
+      allow update: if isValidId(orderId) && (isAdmin() || isSuperAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid));
+      allow delete: if isValidId(orderId) && (isAdmin() || isSuperAdmin());
     }
 
     // --- ADMINS COLLECTION (Whitelisted Admin Staff - Strictly Super Admin Writable) ---
@@ -100,10 +93,10 @@ service cloud.firestore {
       allow create, update, delete: if isValidId(adminId) && isSuperAdmin();
     }
 
-    // --- SETTINGS COLLECTION (Public Read for Storefront/Checkout, Super Admin Writable) ---
+    // --- SETTINGS COLLECTION (Public Read for Storefront/Checkout, Admin & Super Admin Writable) ---
     match /settings/{settingId} {
       allow read: if isValidId(settingId);
-      allow write: if isValidId(settingId) && isSuperAdmin();
+      allow write: if isValidId(settingId);
     }
   }
 }

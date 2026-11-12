@@ -306,70 +306,112 @@ export const PaymentSettingsTab: React.FC = () => {
           </p>
         </div>
 
-        {/* Partial Advance Booking Policy */}
-        <div className="p-5 rounded-2xl bg-[#12141A] border border-white/10 space-y-3">
+        {/* Card 1: Flat Delivery Charge Nationwide (Admin Control) */}
+        <div className="p-5 rounded-2xl bg-[#12141A] border-2 border-[#D4AF37]/40 space-y-3 relative overflow-hidden shadow-lg shadow-[#D4AF37]/5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-[#D4AF37]/15 text-[#D4AF37]">
-                <Truck className="w-4 h-4" />
+              <div className="p-2 rounded-lg bg-[#D4AF37]/20 text-[#D4AF37]">
+                <Truck className="w-5 h-5" />
               </div>
               <div>
                 <span className="text-xs font-bold text-white block">
-                  {language === 'bn' ? 'পার্শিয়াল অ্যাডভান্স সিস্টেম' : 'Partial Advance Booking'}
+                  {language === 'bn' ? 'ফ্ল্যাট ডেলিভারি চার্জ (সারাদেশে)' : 'Flat Delivery Charge (Nationwide)'}
                 </span>
-                <span className="text-[10px] text-emerald-400 font-mono">
-                  Standard: Delivery Charge Booking
+                <span className="text-[10px] text-[#D4AF37] font-mono font-semibold">
+                  {language === 'bn' ? 'ডিফল্ট: ১২০ টাকা' : 'Default: 120 BDT across BD'}
                 </span>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setFormData(prev => ({ ...prev, allowPartialAdvance: !prev.allowPartialAdvance }))}
-              className="text-2xl transition-transform active:scale-95"
-            >
-              {formData.allowPartialAdvance ? (
-                <ToggleRight className="w-8 h-8 text-[#D4AF37]" />
-              ) : (
-                <ToggleLeft className="w-8 h-8 text-gray-600" />
-              )}
-            </button>
+            <div className="px-2.5 py-1 rounded-md bg-[#D4AF37]/20 border border-[#D4AF37]/40 text-[#D4AF37] text-xs font-mono font-bold">
+              ৳{formData.flatDeliveryCharge ?? formData.deliveryCharge ?? 120}
+            </div>
           </div>
-          <div className="flex items-center gap-2 pt-1">
-            <label className="text-[11px] text-gray-400 shrink-0">
-              {language === 'bn' ? 'ডিফল্ট অ্যাডভান্স (BDT):' : 'Fixed Fallback Amount (BDT):'}
+          <p className="text-[11px] text-gray-300 leading-relaxed">
+            {language === 'bn'
+              ? 'সারাদেশের (৬৪ জেলা) গ্রাহকদের জন্য ফ্ল্যাট ডেলিভারি চার্জ নির্ধারণ করুন। এটি পরিবর্তন করলে সাথে সাথে চেকআউট স্টোরে আপডেট হবে।'
+              : 'Set the flat delivery charge across all 64 districts in Bangladesh. Updates reflect instantly across all customer checkout sessions.'}
+          </p>
+          <div className="flex items-center gap-3 pt-2 border-t border-white/5">
+            <label className="text-[11px] font-semibold text-gray-200 shrink-0">
+              {language === 'bn' ? 'ডেলিভারি চার্জ (BDT ৳):' : 'Delivery Charge (BDT ৳):'}
             </label>
             <input
               type="number"
-              value={formData.partialAdvanceAmount || 200}
-              onChange={(e) => setFormData(prev => ({ ...prev, partialAdvanceAmount: Number(e.target.value) || 200 }))}
-              className="w-24 bg-[#181A22] border border-white/10 rounded-lg px-2.5 py-1 text-xs text-white font-mono text-center focus:border-[#D4AF37] focus:outline-none"
+              min="0"
+              step="10"
+              value={formData.flatDeliveryCharge ?? formData.deliveryCharge ?? 120}
+              onChange={(e) => {
+                const val = Math.max(0, Number(e.target.value) || 0);
+                setFormData(prev => ({ 
+                  ...prev, 
+                  flatDeliveryCharge: val,
+                  deliveryCharge: val,
+                  partialAdvanceAmount: val 
+                }));
+              }}
+              className="w-28 bg-[#181A22] border-2 border-[#D4AF37]/50 rounded-xl px-3 py-1.5 text-xs text-white font-mono text-center font-bold focus:border-[#D4AF37] focus:outline-none"
             />
           </div>
         </div>
 
-        {/* Cash on Delivery Master Switch */}
-        <div className="p-5 rounded-2xl bg-[#12141A] border border-white/10 space-y-3">
+        {/* Card 2: Advance Payment Mandatory Rule */}
+        <div className="p-5 rounded-2xl bg-[#12141A] border border-emerald-500/30 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-emerald-500/15 text-emerald-400">
-                <CreditCard className="w-4 h-4" />
+              <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400">
+                <ShieldCheck className="w-5 h-5" />
               </div>
               <div>
                 <span className="text-xs font-bold text-white block">
-                  {language === 'bn' ? 'ক্যাশ অন ডেলিভারি (সিওডি)' : 'Cash on Delivery (COD)'}
+                  {language === 'bn' ? 'অগ্রিম ডেলিভারি চার্জ নীতি' : 'Mandatory Advance Security'}
                 </span>
-                <span className="text-[10px] text-gray-400 font-mono">
-                  Full Cash upon Delivery
+                <span className="text-[10px] text-emerald-400 font-mono">
+                  {language === 'bn' ? '০% সিওডি সম্পূর্ণ নিষিদ্ধ' : 'Zero-Advance COD Prohibited'}
+                </span>
+              </div>
+            </div>
+            <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono">
+              ENFORCED
+            </span>
+          </div>
+          <p className="text-[11px] text-gray-300 leading-relaxed">
+            {language === 'bn'
+              ? 'গ্রাহকরা কোনো অবস্থাতেই অগ্রিম ছাড়া ১০০% ক্যাশ অন ডেলিভারিতে অর্ডার করতে পারবে না। প্রতিটি অর্ডারে ফ্ল্যাট ডেলিভারি চার্জ (৳১২০) বা সম্পূর্ণ মূল্য অগ্রিম প্রদান এবং TrxID দেওয়া বাধ্যতামূলক।'
+              : 'Pure 100% Cash on Delivery without advance security is disabled. Customers must pay the flat delivery charge (120 BDT) or full amount upfront with TrxID.'}
+          </p>
+          <div className="flex items-center justify-between pt-2 border-t border-white/5 text-[11px]">
+            <span className="text-gray-400">
+              {language === 'bn' ? 'অগ্রিম গ্রহণ পদ্ধতি:' : 'Advance Security Type:'}
+            </span>
+            <span className="text-emerald-400 font-mono font-bold">
+              {language === 'bn' ? 'ফ্ল্যাট ডেলিভারি চার্জ (৳' + (formData.flatDeliveryCharge ?? 120) + ')' : 'Flat Delivery Charge (৳' + (formData.flatDeliveryCharge ?? 120) + ')'}
+            </span>
+          </div>
+        </div>
+
+        {/* Card 3: Strict Send Money Only Master Rule */}
+        <div className="p-5 rounded-2xl bg-[#12141A] border border-amber-500/30 space-y-3 relative overflow-hidden">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400">
+                <ShieldAlert className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-white block">
+                  {language === 'bn' ? 'সেন্ড মানি স্ট্রিক্ট পলিসি' : 'Strict "Send Money" Policy'}
+                </span>
+                <span className="text-[10px] text-amber-400 font-mono">
+                  Merchant Payment Prevention
                 </span>
               </div>
             </div>
             <button
               type="button"
-              onClick={() => setFormData(prev => ({ ...prev, allowCod: !prev.allowCod }))}
-              className="text-2xl transition-transform active:scale-95"
+              onClick={() => setFormData(prev => ({ ...prev, sendMoneyStrictRule: !prev.sendMoneyStrictRule }))}
+              className="text-2xl transition-transform active:scale-95 cursor-pointer"
             >
-              {formData.allowCod ? (
-                <ToggleRight className="w-8 h-8 text-emerald-400" />
+              {formData.sendMoneyStrictRule ? (
+                <ToggleRight className="w-8 h-8 text-[#D4AF37]" />
               ) : (
                 <ToggleLeft className="w-8 h-8 text-gray-600" />
               )}
@@ -377,9 +419,15 @@ export const PaymentSettingsTab: React.FC = () => {
           </div>
           <p className="text-[11px] text-gray-400 leading-relaxed">
             {language === 'bn'
-              ? 'সক্রিয় থাকলে গ্রাহকরা সরাসরি সম্পূর্ণ ক্যাশ অন ডেলিভারি অপশনে অর্ডার প্লেস করতে পারবে।'
-              : 'Enables customer checkout option to pay 100% upon courier delivery verification.'}
+              ? 'সক্রিয় থাকলে গ্রাহকদের সুস্পষ্ট সতর্কতা ব্যানার প্রদর্শিত হবে যাতে কেউ ভুলবশত মার্চেন্ট পেমেন্ট না করে।'
+              : 'Enforces high-contrast warning badges on checkout, explicitly instructing customers that merchant payments are disallowed.'}
           </p>
+          <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[11px]">
+            <span className="text-gray-400">{language === 'bn' ? 'পদ্ধতি:' : 'Enforcement:'}</span>
+            <span className="text-amber-300 font-mono font-semibold">
+              {formData.sendMoneyStrictRule ? 'Strict Personal Send Money' : 'Standard'}
+            </span>
+          </div>
         </div>
       </div>
 
