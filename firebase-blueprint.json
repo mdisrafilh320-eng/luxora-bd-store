@@ -17,6 +17,10 @@
           "type": "array",
           "description": "List of saved shipping addresses"
         },
+        "defaultDeliveryInfo": {
+          "type": "object",
+          "description": "Auto-saved customer name, phone, email, and structured delivery address (division, district, upazila, detailedAddress) for 1-click repeat orders"
+        },
         "createdAt": { "type": "string", "format": "date-time", "description": "Account creation timestamp" },
         "updatedAt": { "type": "string", "format": "date-time", "description": "Last profile update timestamp" }
       },

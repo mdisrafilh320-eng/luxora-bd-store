@@ -1,50 +1,103 @@
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signInWithPopup, 
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
-  signInAnonymously, 
-  signOut, 
+  signOut,
   sendPasswordResetEmail,
   updateProfile,
-  signInWithPhoneNumber,
-  RecaptchaVerifier,
-  ConfirmationResult,
+  fetchSignInMethodsForEmail,
   User as FirebaseUser,
-  onAuthStateChanged
+  onAuthStateChanged,
 } from 'firebase/auth';
-import { 
-  doc, 
-  getDoc, 
-  setDoc, 
-  updateDoc, 
-  serverTimestamp 
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  query,
+  setDoc,
+  updateDoc,
+  where,
 } from 'firebase/firestore';
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from '../lib/firebase';
-import { UserProfile, UserRole, MembershipTier, Language } from '../types';
+import {
+  UserProfile,
+  UserRole,
+  MembershipTier,
+  Language,
+  SavedDeliveryInfo,
+  UserAddress,
+} from '../types';
 
 const USERS_COLLECTION = 'users';
+const SUPER_ADMIN_EMAIL = 'mdisrafilh320@gmail.com';
 
-/**
- * Format and sanitize Bangladeshi phone numbers to E.164 standard (+8801XXXXXXXXX)
- */
-export function formatBangladeshiPhone(input: string): string {
-  let cleaned = input.trim().replace(/[\s-]/g, '');
-  if (cleaned.startsWith('01')) {
-    cleaned = '+88' + cleaned;
-  } else if (cleaned.startsWith('8801')) {
-    cleaned = '+' + cleaned;
-  } else if (cleaned.startsWith('+8801')) {
-    // Already in E.164 format
-  } else if (!cleaned.startsWith('+')) {
-    cleaned = '+880' + cleaned;
-  }
-  return cleaned;
+// Prevents race condition between registerWithEmail() and onAuthStateChanged() listener
+const pendingRegistrationSyncs = new Map<string, Promise<UserProfile>>();
+
+export function getPendingRegistrationSync(uid: string): Promise<UserProfile> | undefined {
+  return pendingRegistrationSyncs.get(uid);
+}
+
+export interface AccountExistenceResult {
+  existsInAuth: boolean;
+  existsInFirestore: boolean;
+  signInMethods: string[];
 }
 
 /**
- * Retrieve user profile from Firestore, or construct a default profile
+ * Inspect whether an email already exists in Firebase Auth and/or Firestore (`users`).
+ * Handles Firestore permission-denied gracefully for unauthenticated sign-up attempts.
+ */
+export async function inspectExistingAccount(email: string): Promise<AccountExistenceResult> {
+  const cleanEmail = email.trim().toLowerCase();
+  let signInMethods: string[] = [];
+  let existsInAuth = false;
+  let existsInFirestore = false;
+
+  // 1. Check Firebase Auth sign-in methods
+  try {
+    signInMethods = await fetchSignInMethodsForEmail(auth, cleanEmail);
+    existsInAuth = Array.isArray(signInMethods) && signInMethods.length > 0;
+  } catch {
+    // Email enumeration protection or network check failed; caller still knows from auth error code
+  }
+
+  // 2. Check Firestore users collection (gracefully skip if list rule denies unauthenticated list)
+  try {
+    if (auth.currentUser && auth.currentUser.email?.toLowerCase() === cleanEmail) {
+      const ownSnap = await getDoc(doc(db, USERS_COLLECTION, auth.currentUser.uid));
+      if (ownSnap.exists()) {
+        existsInFirestore = true;
+      }
+    }
+    if (!existsInFirestore) {
+      const q = query(
+        collection(db, USERS_COLLECTION),
+        where('email', '==', cleanEmail),
+        limit(1)
+      );
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        existsInFirestore = true;
+      }
+    }
+  } catch {
+    // Expected when unauthenticated due to PII protection on users list queries
+  }
+
+  return {
+    existsInAuth,
+    existsInFirestore,
+    signInMethods,
+  };
+}
+
+/**
+ * Retrieve user profile from Firestore (`users/{uid}`)
  */
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   try {
@@ -60,10 +113,10 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
 }
 
 /**
- * Create or sync user profile in Firestore
+ * Create or sync user profile in Firestore (`users/{uid}`)
  */
 export async function syncUserProfile(
-  user: FirebaseUser, 
+  user: FirebaseUser,
   additionalData: Partial<UserProfile> = {}
 ): Promise<UserProfile> {
   const userRef = doc(db, USERS_COLLECTION, user.uid);
@@ -71,7 +124,7 @@ export async function syncUserProfile(
     const existing = await getDoc(userRef);
     const now = new Date().toISOString();
 
-    const isAdminUser = user.email === 'mdisrafilh320@gmail.com';
+    const isAdminUser = (user.email || '').toLowerCase() === SUPER_ADMIN_EMAIL;
     const role: UserRole = isAdminUser ? 'admin' : (additionalData.role || 'customer');
 
     let profile: UserProfile;
@@ -81,14 +134,14 @@ export async function syncUserProfile(
         id: user.uid,
         name: additionalData.name || user.displayName || 'Luxora Member',
         email: user.email || additionalData.email || '',
-        phoneNumber: user.phoneNumber || additionalData.phoneNumber || '',
+        phoneNumber: additionalData.phoneNumber || user.phoneNumber || '',
         photoURL: user.photoURL || '',
-        role: role,
+        role,
         membershipTier: (additionalData.membershipTier as MembershipTier) || 'Standard',
         language: (additionalData.language as Language) || 'en',
         points: 100, // Welcome loyalty points
         savedAddresses: additionalData.savedAddresses || [],
-        isGuest: user.isAnonymous,
+        isGuest: false,
         createdAt: now,
         updatedAt: now,
       };
@@ -99,22 +152,29 @@ export async function syncUserProfile(
         ...data,
         name: additionalData.name || data.name || user.displayName || 'Luxora Member',
         email: user.email || data.email || '',
-        phoneNumber: user.phoneNumber || data.phoneNumber || '',
+        phoneNumber: data.phoneNumber || additionalData.phoneNumber || user.phoneNumber || '',
         photoURL: user.photoURL || data.photoURL || '',
-        isGuest: user.isAnonymous,
+        isGuest: false,
         updatedAt: now,
       };
-      if (isAdminUser && profile.role !== 'admin') {
-        profile.role = 'admin';
-      }
-      await updateDoc(userRef, {
+      const updatePayload: Record<string, unknown> = {
         name: profile.name,
         email: profile.email,
         phoneNumber: profile.phoneNumber,
         photoURL: profile.photoURL,
-        role: profile.role,
         updatedAt: now,
-      });
+      };
+      if (isAdminUser && data.role !== 'admin') {
+        profile.role = 'admin';
+        updatePayload.role = 'admin';
+      }
+      await updateDoc(userRef, updatePayload);
+    }
+
+    try {
+      localStorage.setItem('luxora_user', JSON.stringify(profile));
+    } catch {
+      // ignore storage errors
     }
 
     return profile;
@@ -124,7 +184,121 @@ export async function syncUserProfile(
 }
 
 /**
- * 1. Email/Password Login
+ * Save/Update Customer Name, Phone, Optional Email & Full Delivery Address
+ * inside `users/{userId}` in Firestore for 1-click repeat orders.
+ */
+export async function saveUserCheckoutProfile(
+  uid: string,
+  info: Omit<SavedDeliveryInfo, 'updatedAt'>
+): Promise<UserProfile> {
+  const userRef = doc(db, USERS_COLLECTION, uid);
+  const now = new Date().toISOString();
+
+  const deliveryInfo: SavedDeliveryInfo = {
+    fullName: info.fullName.trim(),
+    phoneNumber: info.phoneNumber.trim(),
+    email: (info.email || '').trim(),
+    division: info.division.trim(),
+    divisionName: info.divisionName.trim(),
+    district: info.district.trim(),
+    districtName: info.districtName.trim(),
+    upazila: info.upazila.trim(),
+    detailedAddress: info.detailedAddress.trim(),
+    updatedAt: now,
+  };
+
+  const primaryAddress: UserAddress = {
+    id: 'default',
+    title: 'Primary Delivery Address',
+    recipientName: deliveryInfo.fullName,
+    phoneNumber: deliveryInfo.phoneNumber,
+    email: deliveryInfo.email,
+    division: deliveryInfo.division,
+    divisionName: deliveryInfo.divisionName,
+    district: deliveryInfo.district,
+    districtName: deliveryInfo.districtName,
+    upazila: deliveryInfo.upazila,
+    addressLine: deliveryInfo.detailedAddress,
+    isDefault: true,
+  };
+
+  try {
+    const snap = await getDoc(userRef);
+
+    if (snap.exists()) {
+      const existingData = snap.data() as UserProfile;
+      const otherAddresses = (existingData.savedAddresses || []).filter(
+        (addr) => addr.id !== 'default'
+      );
+      const updatedAddresses = [primaryAddress, ...otherAddresses];
+      const nextEmail = existingData.email || deliveryInfo.email || auth.currentUser?.email || '';
+
+      // Note: Do NOT touch `role` on update so firestore.rules owner-update passes strictly
+      await updateDoc(userRef, {
+        name: deliveryInfo.fullName,
+        phoneNumber: deliveryInfo.phoneNumber,
+        ...(nextEmail ? { email: nextEmail } : {}),
+        defaultDeliveryInfo: deliveryInfo,
+        savedAddresses: updatedAddresses,
+        updatedAt: now,
+      });
+
+      const updatedProfile: UserProfile = {
+        ...existingData,
+        name: deliveryInfo.fullName,
+        phoneNumber: deliveryInfo.phoneNumber,
+        email: nextEmail,
+        defaultDeliveryInfo: deliveryInfo,
+        savedAddresses: updatedAddresses,
+        updatedAt: now,
+      };
+
+      try {
+        localStorage.setItem('luxora_user', JSON.stringify(updatedProfile));
+      } catch {
+        // ignore
+      }
+
+      return updatedProfile;
+    } else {
+      const currentAuthUser = auth.currentUser;
+      const resolvedEmail = currentAuthUser?.email || deliveryInfo.email || '';
+      const isAdminUser = resolvedEmail.toLowerCase() === SUPER_ADMIN_EMAIL;
+
+      const newProfile: UserProfile = {
+        id: uid,
+        name: deliveryInfo.fullName,
+        email: resolvedEmail,
+        phoneNumber: deliveryInfo.phoneNumber,
+        photoURL: currentAuthUser?.photoURL || '',
+        role: isAdminUser ? 'admin' : 'customer',
+        membershipTier: 'Standard',
+        language: 'en',
+        points: 100,
+        defaultDeliveryInfo: deliveryInfo,
+        savedAddresses: [primaryAddress],
+        isGuest: false,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await setDoc(userRef, newProfile);
+
+      try {
+        localStorage.setItem('luxora_user', JSON.stringify(newProfile));
+      } catch {
+        // ignore
+      }
+
+      return newProfile;
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `${USERS_COLLECTION}/${uid}`);
+  }
+}
+
+/**
+ * 1. Email/Password Sign-In
  */
 export async function loginWithEmail(email: string, pass: string): Promise<UserProfile> {
   const cleanEmail = email.trim().toLowerCase();
@@ -140,48 +314,67 @@ export async function registerWithEmail(
   name: string,
   email: string,
   pass: string,
-  phoneNumber: string = '',
   language: Language = 'en'
 ): Promise<UserProfile> {
   const cleanEmail = email.trim().toLowerCase();
-  const cred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
-  await updateProfile(cred.user, { displayName: name.trim() });
-  const profile = await syncUserProfile(cred.user, {
-    name: name.trim(),
-    phoneNumber: phoneNumber ? formatBangladeshiPhone(phoneNumber) : '',
-    language,
-    role: cred.user.email === 'mdisrafilh320@gmail.com' ? 'admin' : 'customer'
-  });
-  return profile;
+  const cleanName = name.trim();
+
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
+    const uid = cred.user.uid;
+
+    const syncPromise = (async () => {
+      await updateProfile(cred.user, { displayName: cleanName });
+      return await syncUserProfile(cred.user, {
+        name: cleanName,
+        language,
+        role: cred.user.email?.toLowerCase() === SUPER_ADMIN_EMAIL ? 'admin' : 'customer',
+      });
+    })();
+
+    pendingRegistrationSyncs.set(uid, syncPromise);
+    try {
+      const profile = await syncPromise;
+      return profile;
+    } finally {
+      pendingRegistrationSyncs.delete(uid);
+    }
+  } catch (error: any) {
+    if (error?.code === 'auth/email-already-in-use') {
+      const inspection = await inspectExistingAccount(cleanEmail);
+      const enrichedError: any = new Error(
+        error?.message || 'An account already exists with this email address.'
+      );
+      enrichedError.code = 'auth/email-already-in-use';
+      enrichedError.email = cleanEmail;
+      enrichedError.signInMethods = inspection.signInMethods;
+      enrichedError.existsInAuth = true; // Confirmed by createUserWithEmailAndPassword rejection
+      enrichedError.existsInFirestore = inspection.existsInFirestore;
+      throw enrichedError;
+    }
+    throw error;
+  }
 }
 
 /**
- * 3. Google Social Sign-In (using Popup with Redirect fallback capability)
+ * 3. Google Sign-In (Popup with Redirect fallback if blocked)
  */
 export async function signInWithGoogle(): Promise<UserProfile> {
   try {
     const cred = await signInWithPopup(auth, googleProvider);
     const profile = await syncUserProfile(cred.user, {
-      role: cred.user.email === 'mdisrafilh320@gmail.com' ? 'admin' : 'customer'
+      role: cred.user.email?.toLowerCase() === SUPER_ADMIN_EMAIL ? 'admin' : 'customer',
     });
     return profile;
   } catch (error: any) {
     if (error?.code === 'auth/account-exists-with-different-credential') {
       const email = error.customData?.email || '';
-      console.warn(`[Firebase Auth] Account exists with different credential for: ${email}`);
       const err: any = new Error(
-        `এই ইমেইল (${email || 'Gmail'}) দিয়ে ইতিপূর্বেই পাসওয়ার্ড অ্যাকাউন্ট খোলা রয়েছে। অনুগ্রহ করে 'Email' ট্যাবে পাসওয়ার্ড দিয়ে লগইন করুন।`
+        `এই ইমেইল (${email || 'Gmail'}) দিয়ে ইতিপূর্বেই পাসওয়ার্ড অ্যাকাউন্ট খোলা রয়েছে। অনুগ্রহ করে ইমেইল ও পাসওয়ার্ড দিয়ে লগইন করুন।`
       );
       err.code = 'auth/account-exists-with-different-credential';
       throw err;
-    } else if (error?.code === 'auth/unauthorized-domain') {
-      const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'unknown';
-      console.error(
-        `[Firebase Auth] Unauthorized Domain Error: "${currentHost}" is not listed under Authorized Domains in your Firebase Console (Project: ${auth.app.options.projectId || 'focused-stack-7j1d7'}).\n` +
-        `To fix: Go to Firebase Console -> Authentication -> Settings -> Authorized Domains -> Add "${currentHost}".`
-      );
     } else if (error?.code === 'auth/popup-blocked') {
-      console.warn('[Firebase Auth] Popup blocked by browser. Attempting redirect flow fallback...');
       await signInWithRedirect(auth, googleProvider);
     }
     throw error;
@@ -189,21 +382,14 @@ export async function signInWithGoogle(): Promise<UserProfile> {
 }
 
 /**
- * Google Sign-In with Full Page Redirect
- */
-export async function signInWithGoogleRedirect(): Promise<void> {
-  await signInWithRedirect(auth, googleProvider);
-}
-
-/**
- * Check for pending redirect result on app initialization
+ * Check for pending Google redirect result on app initialization
  */
 export async function checkRedirectResult(): Promise<UserProfile | null> {
   try {
     const result = await getRedirectResult(auth);
     if (result && result.user) {
       return await syncUserProfile(result.user, {
-        role: result.user.email === 'mdisrafilh320@gmail.com' ? 'admin' : 'customer'
+        role: result.user.email?.toLowerCase() === SUPER_ADMIN_EMAIL ? 'admin' : 'customer',
       });
     }
   } catch (error) {
@@ -213,165 +399,7 @@ export async function checkRedirectResult(): Promise<UserProfile | null> {
 }
 
 /**
- * 4. Phone OTP Sign-In (Bangladeshi numbers)
- */
-export function initRecaptcha(containerId: string): RecaptchaVerifier {
-  // Clear any existing verifier on window if necessary
-  return new RecaptchaVerifier(auth, containerId, {
-    size: 'invisible',
-    callback: () => {
-      // reCAPTCHA solved
-    },
-    'expired-callback': () => {
-      console.warn('reCAPTCHA expired');
-    }
-  });
-}
-
-export async function sendPhoneOtp(
-  phoneNumber: string,
-  verifier: RecaptchaVerifier
-): Promise<ConfirmationResult> {
-  const formattedPhone = formatBangladeshiPhone(phoneNumber);
-  try {
-    const confirmationResult = await signInWithPhoneNumber(auth, formattedPhone, verifier);
-    return confirmationResult;
-  } catch (error: any) {
-    console.warn('Firebase Phone Auth restricted or unavailable:', error?.code || error?.message);
-    
-    // When Firebase project does not have Phone Provider enabled (auth/operation-not-allowed)
-    // or reCAPTCHA is blocked in iframe/sandbox environment, fallback to simulated OTP workflow
-    if (
-      error?.code === 'auth/operation-not-allowed' || 
-      error?.code === 'auth/captcha-check-failed' ||
-      error?.message?.includes('operation-not-allowed')
-    ) {
-      console.info(`[Phone Auth Fallback] Activated simulated verification for ${formattedPhone}`);
-      const mockResult: ConfirmationResult = {
-        verificationId: `luxora_phone_verify_${Date.now()}`,
-        confirm: async (verificationCode: string) => {
-          const cleanCode = verificationCode.trim();
-          if (cleanCode.length < 4) {
-            const err: any = new Error('Invalid verification code length');
-            err.code = 'auth/invalid-verification-code';
-            throw err;
-          }
-          const mockUid = `phone_${formattedPhone.replace(/[^0-9]/g, '')}`;
-          const mockUser: any = {
-            uid: mockUid,
-            phoneNumber: formattedPhone,
-            displayName: 'Luxora Mobile Member',
-            email: '',
-            photoURL: '',
-            isAnonymous: false,
-          };
-          return {
-            user: mockUser,
-            operationType: 'signIn',
-            providerId: 'phone',
-          } as any;
-        }
-      };
-      return mockResult;
-    }
-    throw error;
-  }
-}
-
-export async function verifyPhoneOtp(
-  confirmation: ConfirmationResult,
-  otpCode: string,
-  name?: string
-): Promise<UserProfile> {
-  const cred = await confirmation.confirm(otpCode.trim());
-  if (name && cred.user) {
-    try {
-      await updateProfile(cred.user, { displayName: name.trim() });
-    } catch {}
-  }
-  
-  const formattedPhone = cred.user.phoneNumber || '';
-  const now = new Date().toISOString();
-
-  try {
-    const profile = await syncUserProfile(cred.user, {
-      name: name || cred.user.displayName || 'Luxora Mobile Member',
-      phoneNumber: formattedPhone
-    });
-    if (profile) return profile;
-  } catch (err) {
-    console.warn('Firestore user profile sync warning in phone OTP:', err);
-  }
-
-  // Graceful fallback profile
-  const fallbackProfile: UserProfile = {
-    id: cred.user.uid,
-    name: name || cred.user.displayName || 'Luxora Mobile Member',
-    email: cred.user.email || '',
-    phoneNumber: formattedPhone,
-    photoURL: cred.user.photoURL || '',
-    role: 'customer',
-    membershipTier: 'Standard',
-    language: 'en',
-    points: 100,
-    savedAddresses: [],
-    isGuest: false,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  try {
-    localStorage.setItem('luxora_user', JSON.stringify(fallbackProfile));
-  } catch {}
-
-  return fallbackProfile;
-}
-
-/**
- * 5. Guest / Anonymous User Session
- */
-export async function signInAsGuest(): Promise<UserProfile> {
-  try {
-    const cred = await signInAnonymously(auth);
-    const profile = await syncUserProfile(cred.user, {
-      name: 'Guest Shopper',
-      isGuest: true
-    });
-    return profile;
-  } catch (error: any) {
-    // If anonymous sign-in is restricted or disabled (e.g. auth/admin-restricted-operation),
-    // provide a graceful, secure client-side guest session
-    console.warn('Firebase anonymous authentication restricted, creating local guest session:', error?.code || error?.message);
-
-    const guestId = `guest_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    const now = new Date().toISOString();
-    const guestProfile: UserProfile = {
-      id: guestId,
-      name: 'Guest Shopper',
-      email: '',
-      phoneNumber: '',
-      photoURL: '',
-      role: 'customer',
-      membershipTier: 'Standard',
-      language: 'en',
-      points: 50,
-      savedAddresses: [],
-      isGuest: true,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    try {
-      localStorage.setItem('luxora_user', JSON.stringify(guestProfile));
-      localStorage.setItem('luxora_guest_session', 'true');
-    } catch {}
-
-    return guestProfile;
-  }
-}
-
-/**
- * 6. User Logout
+ * 4. User Logout
  */
 export async function logoutUser(): Promise<void> {
   try {
@@ -382,11 +410,13 @@ export async function logoutUser(): Promise<void> {
   try {
     localStorage.removeItem('luxora_user');
     localStorage.removeItem('luxora_guest_session');
-  } catch {}
+  } catch {
+    // ignore
+  }
 }
 
 /**
- * 7. Password Reset
+ * 5. Password Reset
  */
 export async function sendPasswordReset(email: string): Promise<void> {
   await sendPasswordResetEmail(auth, email.trim());

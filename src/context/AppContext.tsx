@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { 
-  Language, 
-  ProductCategory, 
-  Product, 
-  CartItem, 
-  UserProfile, 
+import {
+  Language,
+  ProductCategory,
+  Product,
+  CartItem,
+  UserProfile,
+  SavedDeliveryInfo,
   ToastMessage,
   Order,
   PaymentSettings,
@@ -17,20 +18,18 @@ import { adminRbacService, isSuperAdminEmail, PRIMARY_SUPER_ADMIN_EMAIL } from '
 import { translations } from '../translations';
 import { mockProducts } from '../data/mockProducts';
 import { validateFirestoreConnection } from '../lib/firebase';
-import { 
+import {
   loginWithEmail as fbLoginWithEmail,
   registerWithEmail as fbRegisterWithEmail,
   signInWithGoogle as fbSignInWithGoogle,
-  sendPhoneOtp as fbSendPhoneOtp,
-  verifyPhoneOtp as fbVerifyPhoneOtp,
-  signInAsGuest as fbSignInAsGuest,
+  saveUserCheckoutProfile as fbSaveUserCheckoutProfile,
   logoutUser as fbLogoutUser,
   sendPasswordReset as fbSendPasswordReset,
   subscribeToAuthState,
   getUserProfile,
   syncUserProfile,
-  initRecaptcha,
-  checkRedirectResult
+  checkRedirectResult,
+  getPendingRegistrationSync
 } from '../services/authService';
 import { getProducts, subscribeToProducts, getLocalCachedProducts } from '../services/productService';
 import { paymentService, DEFAULT_PAYMENT_SETTINGS } from '../services/paymentService';
@@ -43,7 +42,6 @@ import {
   getCachedCategories,
   getCachedReturnPolicy,
 } from '../services/storefrontService';
-import { ConfirmationResult, RecaptchaVerifier } from 'firebase/auth';
 
 interface AppContextType {
   // Language & Localization
@@ -89,13 +87,10 @@ interface AppContextType {
   isAuthModalOpen: boolean;
   setIsAuthModalOpen: (open: boolean) => void;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
-  registerWithEmail: (name: string, email: string, pass: string, phone?: string) => Promise<void>;
+  registerWithEmail: (name: string, email: string, pass: string) => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
-  setupRecaptcha: (containerId: string) => RecaptchaVerifier;
-  sendPhoneOtp: (phoneNumber: string, verifier: RecaptchaVerifier) => Promise<ConfirmationResult>;
-  verifyPhoneOtp: (confirmation: ConfirmationResult, otpCode: string, name?: string) => Promise<void>;
-  signInAsGuest: () => Promise<void>;
+  saveCheckoutProfile: (info: Omit<SavedDeliveryInfo, 'updatedAt'>) => Promise<UserProfile | null>;
   logout: () => Promise<void>;
 
   // Filter & Search & Quick View
@@ -329,7 +324,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setIsAuthLoading(true);
       if (fbUser) {
         try {
-          let profile = await getUserProfile(fbUser.uid);
+          const pendingSync = getPendingRegistrationSync(fbUser.uid);
+          let profile = pendingSync ? await pendingSync : await getUserProfile(fbUser.uid);
           if (!profile) {
             profile = await syncUserProfile(fbUser, { language });
           }
@@ -341,18 +337,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           console.error('Error fetching user profile:', error);
         }
       } else {
-        // Check if there is a local guest session
+        setUser(null);
         try {
-          const isGuestSession = localStorage.getItem('luxora_guest_session') === 'true';
-          const savedUser = localStorage.getItem('luxora_user');
-          if (isGuestSession && savedUser) {
-            setUser(JSON.parse(savedUser));
-          } else {
-            setUser(null);
-            localStorage.removeItem('luxora_user');
-          }
+          localStorage.removeItem('luxora_user');
+          localStorage.removeItem('luxora_guest_session');
         } catch {
-          setUser(null);
+          // ignore
         }
       }
       setIsAuthLoading(false);
@@ -361,7 +351,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => unsubscribe();
   }, [language]);
 
-  // Auth Handlers
+  // Auth Handlers (Google & Email/Password only)
   const handleLoginWithEmail = async (email: string, pass: string) => {
     const profile = await fbLoginWithEmail(email, pass);
     setUser(profile);
@@ -376,20 +366,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const handleRegisterWithEmail = async (
-    name: string, 
-    email: string, 
-    pass: string, 
-    phone: string = ''
+    name: string,
+    email: string,
+    pass: string
   ) => {
-    const profile = await fbRegisterWithEmail(name, email, pass, phone, language);
+    const profile = await fbRegisterWithEmail(name, email, pass, language);
     setUser(profile);
     setIsAuthModalOpen(false);
     addToast({
       type: 'success',
       titleEn: 'Luxora Account Created',
       titleBn: 'অ্যাকাউন্ট তৈরি সম্পন্ন',
-      descriptionEn: `Welcome to Luxora Privilege Club, ${profile.name}.`,
-      descriptionBn: `লাক্সোরাতে আপনাকে স্বাগতম, ${profile.name}।`,
+      descriptionEn: `Welcome to Luxora BD, ${profile.name}.`,
+      descriptionBn: `লাক্সোরা বিডিতে আপনাকে স্বাগতম, ${profile.name}।`,
     });
   };
 
@@ -417,42 +406,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const handleSetupRecaptcha = (containerId: string) => {
-    return initRecaptcha(containerId);
-  };
-
-  const handleSendPhoneOtp = async (phoneNumber: string, verifier: RecaptchaVerifier) => {
-    return await fbSendPhoneOtp(phoneNumber, verifier);
-  };
-
-  const handleVerifyPhoneOtp = async (
-    confirmation: ConfirmationResult, 
-    otpCode: string, 
-    name?: string
-  ) => {
-    const profile = await fbVerifyPhoneOtp(confirmation, otpCode, name);
-    setUser(profile);
-    setIsAuthModalOpen(false);
-    addToast({
-      type: 'success',
-      titleEn: 'Phone Verified Successfully',
-      titleBn: 'ফোন নম্বর ভেরিফিকেশন সফল',
-      descriptionEn: `Welcome, ${profile.name}.`,
-      descriptionBn: `স্বাগতম, ${profile.name}।`,
-    });
-  };
-
-  const handleSignInAsGuest = async () => {
-    const profile = await fbSignInAsGuest();
-    setUser(profile);
-    setIsAuthModalOpen(false);
-    addToast({
-      type: 'info',
-      titleEn: 'Guest Mode Activated',
-      titleBn: 'গেস্ট সেশন সক্রিয়',
-      descriptionEn: 'You can now browse items and checkout as a guest.',
-      descriptionBn: 'আপনি পণ্য ব্রাউজ ও অর্ডার করতে পারবেন।',
-    });
+  const handleSaveCheckoutProfile = async (
+    info: Omit<SavedDeliveryInfo, 'updatedAt'>
+  ): Promise<UserProfile | null> => {
+    if (!user || user.isGuest || !user.id) return null;
+    const updatedProfile = await fbSaveUserCheckoutProfile(user.id, info);
+    setUser(updatedProfile);
+    return updatedProfile;
   };
 
   const handleLogout = async () => {
@@ -789,10 +749,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         registerWithEmail: handleRegisterWithEmail,
         sendPasswordReset: handleSendPasswordReset,
         signInWithGoogle: handleSignInWithGoogle,
-        setupRecaptcha: handleSetupRecaptcha,
-        sendPhoneOtp: handleSendPhoneOtp,
-        verifyPhoneOtp: handleVerifyPhoneOtp,
-        signInAsGuest: handleSignInAsGuest,
+        saveCheckoutProfile: handleSaveCheckoutProfile,
         logout: handleLogout,
         searchQuery,
         setSearchQuery,

@@ -83,9 +83,27 @@ export interface UserAddress {
   title: string; // e.g. "Home", "Office"
   recipientName: string;
   phoneNumber: string;
+  email?: string;
+  division?: string;
+  divisionName?: string;
+  district: string; // Bangladeshi District ID or name
+  districtName?: string;
+  upazila?: string;
   addressLine: string;
-  district: string; // Bangladeshi District (e.g. Dhaka, Chittagong, Sylhet)
   isDefault: boolean;
+}
+
+export interface SavedDeliveryInfo {
+  fullName: string;
+  phoneNumber: string;
+  email?: string;
+  division: string;
+  divisionName: string;
+  district: string;
+  districtName: string;
+  upazila: string;
+  detailedAddress: string;
+  updatedAt: string;
 }
 
 export type UserRole = 'customer' | 'admin';
@@ -104,6 +122,7 @@ export interface UserProfile {
   language: Language;
   points: number;
   savedAddresses?: UserAddress[];
+  defaultDeliveryInfo?: SavedDeliveryInfo;
   isGuest?: boolean;
   createdAt?: string;
   updatedAt?: string;

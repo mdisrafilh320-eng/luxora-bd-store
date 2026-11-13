@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'motion/react';
 import { 
   ShieldCheck, 
   MapPin, 
   Phone, 
+  Mail,
   User, 
   Truck, 
   CreditCard, 
@@ -24,7 +25,9 @@ import {
   ShieldAlert, 
   Wallet,
   ChevronDown,
-  Navigation
+  Navigation,
+  Pencil,
+  LogIn
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatBDT } from '../../translations';
@@ -35,6 +38,30 @@ import { orderService } from '../../services/orderService';
 import { uploadPaymentProof } from '../../services/storageService';
 import { OrderConfirmationModal } from './OrderConfirmationModal';
 
+const resolveDivisionId = (value?: string): string => {
+  if (!value) return '';
+  const cleaned = value.trim().toLowerCase();
+  const match = BD_DIVISIONS.find(
+    (d) =>
+      d.id.toLowerCase() === cleaned ||
+      d.nameEn.toLowerCase() === cleaned ||
+      d.nameBn === value.trim()
+  );
+  return match ? match.id : '';
+};
+
+const resolveDistrictId = (value?: string): string => {
+  if (!value) return '';
+  const cleaned = value.trim().toLowerCase();
+  const match = BD_DISTRICTS.find(
+    (d) =>
+      d.id.toLowerCase() === cleaned ||
+      d.nameEn.toLowerCase() === cleaned ||
+      d.nameBn === value.trim()
+  );
+  return match ? match.id : '';
+};
+
 export const CheckoutPage: React.FC = () => {
   const { 
     cart, 
@@ -43,6 +70,8 @@ export const CheckoutPage: React.FC = () => {
     removeFromCart,
     clearCart, 
     user, 
+    saveCheckoutProfile,
+    setIsAuthModalOpen,
     language, 
     setActiveView, 
     addToast,
@@ -50,12 +79,21 @@ export const CheckoutPage: React.FC = () => {
   } = useApp();
 
   // 1. Essential Customer Dossier State
-  const [fullName, setFullName] = useState(user?.name || '');
-  const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber || '');
-  const [selectedDivision, setSelectedDivision] = useState('');
-  const [selectedDistrict, setSelectedDistrict] = useState('');
-  const [upazila, setUpazila] = useState('');
-  const [fullAddress, setFullAddress] = useState('');
+  const [fullName, setFullName] = useState(user?.defaultDeliveryInfo?.fullName || user?.name || '');
+  const [phoneNumber, setPhoneNumber] = useState(user?.defaultDeliveryInfo?.phoneNumber || user?.phoneNumber || '');
+  const [customerEmail, setCustomerEmail] = useState(user?.defaultDeliveryInfo?.email || user?.email || '');
+  const [selectedDivision, setSelectedDivision] = useState(() =>
+    resolveDivisionId(user?.defaultDeliveryInfo?.division || user?.defaultDeliveryInfo?.divisionName)
+  );
+  const [selectedDistrict, setSelectedDistrict] = useState(() =>
+    resolveDistrictId(user?.defaultDeliveryInfo?.district || user?.defaultDeliveryInfo?.districtName)
+  );
+  const [upazila, setUpazila] = useState(user?.defaultDeliveryInfo?.upazila || '');
+  const [fullAddress, setFullAddress] = useState(user?.defaultDeliveryInfo?.detailedAddress || '');
+
+  // Saved Profile Edit Toggle (1-Click Repeat Orders)
+  const [isEditingAddress, setIsEditingAddress] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // 2. Payment State (Strict Advance Policy - Zero-Advance COD Disallowed)
   const [paymentOption, setPaymentOption] = useState<PaymentOption>('partial_advance');
@@ -77,6 +115,59 @@ export const CheckoutPage: React.FC = () => {
   const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
+  // Determine whether logged-in user already has saved profile + address for 1-click repeat orders
+  const savedInfo = user && !user.isGuest ? user.defaultDeliveryInfo : undefined;
+  const fallbackSavedAddr =
+    user && !user.isGuest
+      ? user.savedAddresses?.find((a) => a.isDefault) || user.savedAddresses?.[0]
+      : undefined;
+
+  const hasCompleteSavedProfile = Boolean(
+    user &&
+      !user.isGuest &&
+      ((savedInfo &&
+        savedInfo.fullName?.trim() &&
+        savedInfo.phoneNumber?.trim() &&
+        resolveDivisionId(savedInfo.division || savedInfo.divisionName) &&
+        resolveDistrictId(savedInfo.district || savedInfo.districtName) &&
+        savedInfo.upazila?.trim() &&
+        savedInfo.detailedAddress?.trim()) ||
+        (fallbackSavedAddr &&
+          fallbackSavedAddr.recipientName?.trim() &&
+          fallbackSavedAddr.phoneNumber?.trim() &&
+          resolveDivisionId(fallbackSavedAddr.division || fallbackSavedAddr.divisionName) &&
+          resolveDistrictId(fallbackSavedAddr.district || fallbackSavedAddr.districtName) &&
+          fallbackSavedAddr.upazila?.trim() &&
+          fallbackSavedAddr.addressLine?.trim()))
+  );
+
+  const applySavedProfileToForm = useCallback(() => {
+    if (!user || user.isGuest) return;
+    if (savedInfo) {
+      setFullName(savedInfo.fullName || user.name || '');
+      setPhoneNumber(savedInfo.phoneNumber || user.phoneNumber || '');
+      setCustomerEmail(savedInfo.email || user.email || '');
+      setSelectedDivision(resolveDivisionId(savedInfo.division || savedInfo.divisionName));
+      setSelectedDistrict(resolveDistrictId(savedInfo.district || savedInfo.districtName));
+      setUpazila(savedInfo.upazila || '');
+      setFullAddress(savedInfo.detailedAddress || '');
+      return;
+    }
+    if (fallbackSavedAddr) {
+      setFullName(fallbackSavedAddr.recipientName || user.name || '');
+      setPhoneNumber(fallbackSavedAddr.phoneNumber || user.phoneNumber || '');
+      setCustomerEmail(fallbackSavedAddr.email || user.email || '');
+      setSelectedDivision(resolveDivisionId(fallbackSavedAddr.division || fallbackSavedAddr.divisionName));
+      setSelectedDistrict(resolveDistrictId(fallbackSavedAddr.district || fallbackSavedAddr.districtName));
+      setUpazila(fallbackSavedAddr.upazila || '');
+      setFullAddress(fallbackSavedAddr.addressLine || '');
+      return;
+    }
+    if (user.name && !fullName) setFullName(user.name);
+    if (user.phoneNumber && !phoneNumber) setPhoneNumber(user.phoneNumber);
+    if (user.email && !customerEmail) setCustomerEmail(user.email);
+  }, [user, savedInfo, fallbackSavedAddr]);
+
   // Active MFS gateways dynamically from Firestore settings
   const activeMfsList = (['bkash', 'nagad', 'rocket'] as const).filter((mfsKey) => {
     const config = paymentSettings?.gateways?.[mfsKey];
@@ -89,11 +180,12 @@ export const CheckoutPage: React.FC = () => {
     }
   }, [activeMfsList, selectedMfs]);
 
-  // Sync user profile data if available
+  // Auto-populate saved customer details when user logs in or profile loads
   useEffect(() => {
-    if (user?.name && !fullName) setFullName(user.name);
-    if (user?.phoneNumber && !phoneNumber) setPhoneNumber(user.phoneNumber);
-  }, [user]);
+    if (user && !user.isGuest) {
+      applySavedProfileToForm();
+    }
+  }, [user?.id, user?.defaultDeliveryInfo?.updatedAt]);
 
   // Filtered Districts & Suggested Upazilas based on Division / District selection
   const filteredDistricts = selectedDivision
@@ -332,6 +424,7 @@ export const CheckoutPage: React.FC = () => {
       const districtObj = BD_DISTRICTS.find((d) => d.id === selectedDistrict);
       const divisionName = divisionObj ? divisionObj.nameEn : selectedDivision;
       const districtName = districtObj ? districtObj.nameEn : selectedDistrict;
+      const cleanEmail = (customerEmail || user?.email || '').trim();
 
       // Create Order in Firestore with timeout and auto-cache protection
       const newOrder = await orderService.createOrder({
@@ -339,7 +432,7 @@ export const CheckoutPage: React.FC = () => {
         customer: {
           name: fullName.trim(),
           phone: phoneNumber.trim(),
-          email: user?.email || '',
+          email: cleanEmail,
           division: divisionName,
           district: districtName,
           upazila: upazila.trim(),
@@ -381,6 +474,29 @@ export const CheckoutPage: React.FC = () => {
           estimatedDelivery: '2-3 Business Days Nationwide',
         },
       });
+
+      // Auto-save customer Name, Phone, Optional Email & Full Address to Firestore `users/{userId}`
+      // so all future repeat orders are 1-click pre-filled!
+      if (user && !user.isGuest && user.id) {
+        try {
+          await Promise.race([
+            saveCheckoutProfile({
+              fullName: fullName.trim(),
+              phoneNumber: phoneNumber.trim(),
+              email: cleanEmail,
+              division: selectedDivision,
+              divisionName,
+              district: selectedDistrict,
+              districtName,
+              upazila: upazila.trim(),
+              detailedAddress: fullAddress.trim(),
+            }),
+            new Promise<void>((resolve) => setTimeout(resolve, 4000)),
+          ]);
+        } catch (profileErr) {
+          console.warn('Auto-save customer profile notice:', profileErr);
+        }
+      }
 
       // Clear cart on successful order
       clearCart();
@@ -477,218 +593,433 @@ export const CheckoutPage: React.FC = () => {
         {/* Left Column: Essential Details + Advance Payment (8 Cols) */}
         <div className="lg:col-span-8 space-y-6">
 
-          {/* SECTION 1: ESSENTIAL CUSTOMER DETAILS (STREAMLINED) */}
+          {/* SECTION 1: CUSTOMER PROFILE & DELIVERY ADDRESS (AUTO-SAVED FOR 1-CLICK REPEAT ORDERS) */}
           <div className="card-bg border border-[#22222E] rounded-2xl p-4 sm:p-6 lg:p-7 space-y-5 shadow-xl">
-            <div className="flex items-center gap-3 pb-3 border-b border-[#20202A]">
-              <div className="w-7 h-7 rounded-full gold-bg text-black flex items-center justify-center font-bold text-xs shrink-0">
-                1
-              </div>
-              <div className="min-w-0">
-                <h3 className="text-base font-bold text-white">
-                  {language === 'bn' ? 'গ্রাহকের তথ্য ও ডেলিভারি ঠিকানা' : 'Customer & Delivery Address'}
-                </h3>
-                <p className="text-xs text-gray-400">
-                  {language === 'bn' ? 'পণ্য প্রেরণের জন্য নাম, মোবাইল নম্বর এবং ঠিকানা দিন' : 'Enter your name, active mobile number, and full delivery address'}
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Full Name */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-gray-300">
-                  {language === 'bn' ? 'আপনার নাম *' : 'Customer Full Name *'}
-                </label>
-                <div className="relative">
-                  <User className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
-                  <input
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="e.g. Tanvir Ahmed"
-                    className={`w-full min-h-[46px] bg-[#121218] border ${
-                      formErrors.fullName ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-[#2A2A36]'
-                    } rounded-xl pl-10 pr-4 py-3 text-base sm:text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] transition-colors`}
-                  />
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#20202A]">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-7 h-7 rounded-full gold-bg text-black flex items-center justify-center font-bold text-xs shrink-0">
+                  1
                 </div>
-                {formErrors.fullName && (
-                  <span className="text-[11px] text-red-400 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.fullName}
-                  </span>
-                )}
-              </div>
-
-              {/* Mobile Phone Number */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-gray-300">
-                  {language === 'bn' ? 'মোবাইল নম্বর (১১ ডিজিট) *' : 'Phone Number (11 Digits) *'}
-                </label>
-                <div className="relative">
-                  <Phone className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
-                  <input
-                    type="tel"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    placeholder="017XXXXXXXX"
-                    className={`w-full min-h-[46px] bg-[#121218] border ${
-                      formErrors.phoneNumber ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-[#2A2A36]'
-                    } rounded-xl pl-10 pr-4 py-3 text-base sm:text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] font-mono transition-colors`}
-                  />
+                <div className="min-w-0">
+                  <h3 className="text-base font-bold text-white">
+                    {language === 'bn' ? 'গ্রাহকের তথ্য ও ডেলিভারি ঠিকানা' : 'Customer & Delivery Address'}
+                  </h3>
+                  <p className="text-xs text-gray-400">
+                    {hasCompleteSavedProfile && !isEditingAddress
+                      ? (language === 'bn'
+                          ? 'সংরক্ষিত প্রোফাইল স্বয়ংক্রিয়ভাবে লোড হয়েছে — শুধু পেমেন্ট করে অর্ডার করুন'
+                          : 'Saved profile loaded automatically — simply complete payment below')
+                      : (language === 'bn'
+                          ? 'পণ্য প্রেরণের জন্য নাম, মোবাইল নম্বর এবং ঠিকানা দিন'
+                          : 'Enter your name, active mobile number, and full delivery address')}
+                  </p>
                 </div>
-                {formErrors.phoneNumber && (
-                  <span className="text-[11px] text-red-400 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.phoneNumber}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Structured Bangladesh Location Fields: Division, District, Upazila */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Division (বিভাগ) */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-gray-300">
-                  {language === 'bn' ? 'বিভাগ (Division) *' : 'Division (বিভাগ) *'}
-                </label>
-                <div className="relative">
-                  <select
-                    value={selectedDivision}
-                    onChange={(e) => {
-                      const divId = e.target.value;
-                      setSelectedDivision(divId);
-                      setSelectedDistrict('');
-                      setUpazila('');
-                      setFormErrors((prev) => ({
-                        ...prev,
-                        division: '',
-                        district: '',
-                        upazila: '',
-                      }));
-                    }}
-                    className={`w-full min-h-[46px] appearance-none bg-[#121218] border ${
-                      formErrors.division ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-[#2A2A36]'
-                    } rounded-xl pl-3.5 pr-9 py-3 text-base sm:text-xs text-white focus:outline-none focus:border-[#D4AF37] transition-colors cursor-pointer`}
-                  >
-                    <option value="" className="bg-[#121218] text-gray-400">
-                      {language === 'bn' ? 'বিভাগ বেছে নিন' : 'Select Division'}
-                    </option>
-                    {BD_DIVISIONS.map((div) => (
-                      <option key={div.id} value={div.id} className="bg-[#121218] text-white">
-                        {language === 'bn' ? `${div.nameBn} (${div.nameEn})` : `${div.nameEn} (${div.nameBn})`}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                </div>
-                {formErrors.division && (
-                  <span className="text-[11px] text-red-400 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.division}
-                  </span>
-                )}
               </div>
 
-              {/* District (জেলা) */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-gray-300">
-                  {language === 'bn' ? 'জেলা (District) *' : 'District (জেলা) *'}
-                </label>
-                <div className="relative">
-                  <select
-                    value={selectedDistrict}
-                    disabled={!selectedDivision}
-                    onChange={(e) => {
-                      setSelectedDistrict(e.target.value);
-                      setUpazila('');
-                      setFormErrors((prev) => ({ ...prev, district: '', upazila: '' }));
-                    }}
-                    className={`w-full min-h-[46px] appearance-none bg-[#121218] border ${
-                      formErrors.district ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-[#2A2A36]'
-                    } rounded-xl pl-3.5 pr-9 py-3 text-base sm:text-xs text-white focus:outline-none focus:border-[#D4AF37] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
-                  >
-                    <option value="" className="bg-[#121218] text-gray-400">
-                      {!selectedDivision
-                        ? (language === 'bn' ? 'আগে বিভাগ বেছে নিন' : 'Select Division first')
-                        : (language === 'bn' ? 'জেলা বেছে নিন' : 'Select District')}
-                    </option>
-                    {filteredDistricts.map((dist) => (
-                      <option key={dist.id} value={dist.id} className="bg-[#121218] text-white">
-                        {language === 'bn' ? `${dist.nameBn} (${dist.nameEn})` : `${dist.nameEn} (${dist.nameBn})`}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                </div>
-                {formErrors.district && (
-                  <span className="text-[11px] text-red-400 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.district}
-                  </span>
-                )}
-              </div>
+              {hasCompleteSavedProfile && !isEditingAddress && (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingAddress(true)}
+                  className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-[#161620] hover:bg-[#1E1E2C] border border-[#D4AF37]/40 hover:border-[#D4AF37] text-xs font-semibold text-[#D4AF37] flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  <span>{language === 'bn' ? 'ঠিকানা / তথ্য পরিবর্তন' : 'Edit Address / Info'}</span>
+                </button>
+              )}
 
-              {/* Upazila / Police Station (থানা / উপজেলা) */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-gray-300">
-                  {language === 'bn' ? 'থানা / উপজেলা (Upazila) *' : 'Upazila / Thana (থানা) *'}
-                </label>
-                <div className="relative">
-                  <Navigation className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
-                  <input
-                    type="text"
-                    list="bd-upazila-options"
-                    value={upazila}
-                    onChange={(e) => {
-                      setUpazila(e.target.value);
-                      if (formErrors.upazila) {
-                        setFormErrors((prev) => ({ ...prev, upazila: '' }));
+              {hasCompleteSavedProfile && isEditingAddress && (
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    disabled={isSavingProfile}
+                    onClick={async () => {
+                      const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
+                      if (
+                        !fullName.trim() ||
+                        cleanPhone.length < 11 ||
+                        !selectedDivision ||
+                        !selectedDistrict ||
+                        !upazila.trim() ||
+                        fullAddress.trim().length < 5
+                      ) {
+                        addToast({
+                          type: 'warning',
+                          titleEn: 'Complete Address Required',
+                          titleBn: 'সম্পূর্ণ তথ্য দিন',
+                          descriptionEn: 'Please fill Name, 11-digit Phone, Division, District, Upazila, and Address.',
+                          descriptionBn: 'নাম, ১১ ডিজিটের ফোন, বিভাগ, জেলা, থানা এবং বিস্তারিত ঠিকানা লিখুন।',
+                        });
+                        return;
+                      }
+                      setIsSavingProfile(true);
+                      try {
+                        const divObj = BD_DIVISIONS.find((d) => d.id === selectedDivision);
+                        const distObj = BD_DISTRICTS.find((d) => d.id === selectedDistrict);
+                        await saveCheckoutProfile({
+                          fullName: fullName.trim(),
+                          phoneNumber: phoneNumber.trim(),
+                          email: customerEmail.trim(),
+                          division: selectedDivision,
+                          divisionName: divObj ? divObj.nameEn : selectedDivision,
+                          district: selectedDistrict,
+                          districtName: distObj ? distObj.nameEn : selectedDistrict,
+                          upazila: upazila.trim(),
+                          detailedAddress: fullAddress.trim(),
+                        });
+                        setIsEditingAddress(false);
+                        addToast({
+                          type: 'success',
+                          titleEn: 'Delivery Info Updated',
+                          titleBn: 'ডেলিভারি তথ্য সংরক্ষিত হয়েছে',
+                          descriptionEn: 'Your updated profile has been saved for future orders.',
+                          descriptionBn: 'পরবর্তী অর্ডারের জন্য আপনার নতুন তথ্য সংরক্ষিত হয়েছে।',
+                        });
+                      } catch {
+                        addToast({
+                          type: 'error',
+                          titleEn: 'Could Not Save Info',
+                          titleBn: 'তথ্য সংরক্ষণ ব্যর্থ',
+                          descriptionEn: 'Unable to update saved address right now.',
+                        });
+                      } finally {
+                        setIsSavingProfile(false);
                       }
                     }}
-                    placeholder={language === 'bn' ? 'থানা বা উপজেলার নাম লিখুন' : 'e.g. Banani, Savar, Sadar'}
-                    className={`w-full min-h-[46px] bg-[#121218] border ${
-                      formErrors.upazila ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-[#2A2A36]'
-                    } rounded-xl pl-9 pr-3.5 py-3 text-base sm:text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] transition-colors`}
-                  />
-                  <datalist id="bd-upazila-options">
-                    {suggestedUpazilas.map((u) => (
-                      <option key={u} value={u} />
-                    ))}
-                  </datalist>
-                </div>
-                {formErrors.upazila && (
-                  <span className="text-[11px] text-red-400 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.upazila}
-                  </span>
-                )}
-              </div>
-            </div>
+                    className="min-h-[38px] px-3.5 py-1.5 rounded-xl gold-bg text-black text-xs font-bold flex items-center gap-1.5 hover:brightness-110 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingProfile ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    <span>{language === 'bn' ? 'সংরক্ষণ' : 'Save Info'}</span>
+                  </button>
 
-            {/* Detailed Delivery Address */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-gray-300">
-                {language === 'bn' ? 'বিস্তারিত ডেলিভারি ঠিকানা (বাড়ি, রোড, গ্রাম/এলাকা) *' : 'Detailed Delivery Address (House, Road, Area/Village) *'}
-              </label>
-              <div className="relative">
-                <MapPin className="w-4 h-4 absolute left-3.5 top-3.5 text-gray-500 pointer-events-none" />
-                <textarea
-                  rows={2}
-                  value={fullAddress}
-                  onChange={(e) => {
-                    setFullAddress(e.target.value);
-                    if (formErrors.fullAddress) {
-                      setFormErrors((prev) => ({ ...prev, fullAddress: '' }));
-                    }
-                  }}
-                  placeholder={language === 'bn' ? 'বাড়ি/ফ্ল্যাট নং, রোড নং, গ্রাম বা এলাকার বিস্তারিত ঠিকানা লিখুন' : 'House #, Flat #, Road #, Block, Area or Village'}
-                  className={`w-full bg-[#121218] border ${
-                    formErrors.fullAddress ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-[#2A2A36]'
-                  } rounded-xl pl-10 pr-4 py-3 text-base sm:text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] transition-colors`}
-                />
-              </div>
-              {formErrors.fullAddress && (
-                <span className="text-[11px] text-red-400 flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.fullAddress}
-                </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      applySavedProfileToForm();
+                      setFormErrors({});
+                      setIsEditingAddress(false);
+                    }}
+                    className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[#161620] border border-white/10 hover:border-white/25 text-xs text-gray-300 hover:text-white transition-colors cursor-pointer"
+                  >
+                    {language === 'bn' ? 'বাতিল' : 'Cancel'}
+                  </button>
+                </div>
               )}
             </div>
+
+            {/* Optional Sign-In Hint for Guest Visitors to Enable 1-Click Repeat Orders */}
+            {!user && (
+              <div className="p-3.5 rounded-xl bg-[#14151D] border border-[#D4AF37]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="text-xs text-gray-300">
+                  <span className="font-semibold text-[#D4AF37] block">
+                    {language === 'bn' ? 'এক ক্লিকে পরবর্তী অর্ডার করতে চান?' : 'Want 1-click checkout on future orders?'}
+                  </span>
+                  <span className="text-[11px] text-gray-400">
+                    {language === 'bn'
+                      ? 'গুগল বা ইমেইল দিয়ে সাইন ইন করলে আপনার নাম ও ঠিকানা স্বয়ংক্রিয়ভাবে সেভ থাকবে।'
+                      : 'Sign in with Google or Email to automatically save your delivery address.'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAuthModalOpen(true)}
+                  className="min-h-[38px] px-4 py-2 rounded-xl bg-[#D4AF37]/15 border border-[#D4AF37]/40 hover:bg-[#D4AF37] hover:text-black text-[#D4AF37] text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>{language === 'bn' ? 'সাইন ইন করুন' : 'Sign In'}</span>
+                </button>
+              </div>
+            )}
+
+            {/* 1-CLICK REPEAT ORDER SAVED SUMMARY VIEW */}
+            {hasCompleteSavedProfile && !isEditingAddress ? (
+              <div className="p-4 sm:p-5 rounded-2xl bg-[#121218] border border-emerald-500/30 space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>
+                      {language === 'bn'
+                        ? 'সংরক্ষিত ডেলিভারি প্রোফাইল সক্রিয়'
+                        : 'Saved Customer & Delivery Profile Active'}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-gray-400 font-mono">
+                    {language === 'bn' ? 'অর্ডার প্রস্তুত' : 'Ready for Instant Checkout'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-white/5 text-xs">
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase tracking-wider text-gray-500 font-mono block">
+                      {language === 'bn' ? 'গ্রাহক' : 'Recipient'}
+                    </span>
+                    <p className="text-sm font-bold text-white">{fullName}</p>
+                    <p className="text-gray-300 font-mono flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />
+                      <span>{phoneNumber}</span>
+                    </p>
+                    {customerEmail && (
+                      <p className="text-gray-400 text-[11px] flex items-center gap-1.5 truncate">
+                        <Mail className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                        <span className="truncate">{customerEmail}</span>
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase tracking-wider text-gray-500 font-mono block">
+                      {language === 'bn' ? 'ডেলিভারি ঠিকানা' : 'Delivery Destination'}
+                    </span>
+                    <p className="text-xs text-gray-200 leading-relaxed flex items-start gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-[#D4AF37] shrink-0 mt-0.5" />
+                      <span>
+                        {[
+                          fullAddress,
+                          upazila,
+                          BD_DISTRICTS.find((d) => d.id === selectedDistrict)?.nameEn || selectedDistrict,
+                          BD_DIVISIONS.find((d) => d.id === selectedDivision)?.nameEn || selectedDivision,
+                        ]
+                          .filter(Boolean)
+                          .join(', ')}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* FULL EDITABLE CUSTOMER & ADDRESS FORM (First Order or Editing) */
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {/* Full Name */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-gray-300">
+                      {language === 'bn' ? 'আপনার নাম *' : 'Customer Full Name *'}
+                    </label>
+                    <div className="relative">
+                      <User className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={fullName}
+                        onChange={(e) => {
+                          setFullName(e.target.value);
+                          if (formErrors.fullName) setFormErrors((prev) => ({ ...prev, fullName: '' }));
+                        }}
+                        placeholder="e.g. Tanvir Ahmed"
+                        className={`w-full min-h-[46px] bg-[#121218] border ${
+                          formErrors.fullName ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-[#2A2A36]'
+                        } rounded-xl pl-10 pr-4 py-3 text-base sm:text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] transition-colors`}
+                      />
+                    </div>
+                    {formErrors.fullName && (
+                      <span className="text-[11px] text-red-400 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.fullName}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Mobile Phone Number */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-gray-300">
+                      {language === 'bn' ? 'মোবাইল নম্বর (১১ ডিজিট) *' : 'Phone Number (11 Digits) *'}
+                    </label>
+                    <div className="relative">
+                      <Phone className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                      <input
+                        type="tel"
+                        value={phoneNumber}
+                        onChange={(e) => {
+                          setPhoneNumber(e.target.value);
+                          if (formErrors.phoneNumber) setFormErrors((prev) => ({ ...prev, phoneNumber: '' }));
+                        }}
+                        placeholder="017XXXXXXXX"
+                        className={`w-full min-h-[46px] bg-[#121218] border ${
+                          formErrors.phoneNumber ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-[#2A2A36]'
+                        } rounded-xl pl-10 pr-4 py-3 text-base sm:text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] font-mono transition-colors`}
+                      />
+                    </div>
+                    {formErrors.phoneNumber && (
+                      <span className="text-[11px] text-red-400 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.phoneNumber}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Optional Email */}
+                  <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
+                    <label className="block text-xs font-semibold text-gray-300">
+                      {language === 'bn' ? 'ইমেইল (ঐচ্ছিক)' : 'Email Address (Optional)'}
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                      <input
+                        type="email"
+                        value={customerEmail}
+                        onChange={(e) => setCustomerEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        className="w-full min-h-[46px] bg-[#121218] border border-[#2A2A36] rounded-xl pl-10 pr-4 py-3 text-base sm:text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] transition-colors"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Structured Bangladesh Location Fields: Division, District, Upazila */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Division (বিভাগ) */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-gray-300">
+                      {language === 'bn' ? 'বিভাগ (Division) *' : 'Division (বিভাগ) *'}
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={selectedDivision}
+                        onChange={(e) => {
+                          const divId = e.target.value;
+                          setSelectedDivision(divId);
+                          setSelectedDistrict('');
+                          setUpazila('');
+                          setFormErrors((prev) => ({
+                            ...prev,
+                            division: '',
+                            district: '',
+                            upazila: '',
+                          }));
+                        }}
+                        className={`w-full min-h-[46px] appearance-none bg-[#121218] border ${
+                          formErrors.division ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-[#2A2A36]'
+                        } rounded-xl pl-3.5 pr-9 py-3 text-base sm:text-xs text-white focus:outline-none focus:border-[#D4AF37] transition-colors cursor-pointer`}
+                      >
+                        <option value="" className="bg-[#121218] text-gray-400">
+                          {language === 'bn' ? 'বিভাগ বেছে নিন' : 'Select Division'}
+                        </option>
+                        {BD_DIVISIONS.map((div) => (
+                          <option key={div.id} value={div.id} className="bg-[#121218] text-white">
+                            {language === 'bn' ? `${div.nameBn} (${div.nameEn})` : `${div.nameEn} (${div.nameBn})`}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                    {formErrors.division && (
+                      <span className="text-[11px] text-red-400 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.division}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* District (জেলা) */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-gray-300">
+                      {language === 'bn' ? 'জেলা (District) *' : 'District (জেলা) *'}
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={selectedDistrict}
+                        disabled={!selectedDivision}
+                        onChange={(e) => {
+                          setSelectedDistrict(e.target.value);
+                          setUpazila('');
+                          setFormErrors((prev) => ({ ...prev, district: '', upazila: '' }));
+                        }}
+                        className={`w-full min-h-[46px] appearance-none bg-[#121218] border ${
+                          formErrors.district ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-[#2A2A36]'
+                        } rounded-xl pl-3.5 pr-9 py-3 text-base sm:text-xs text-white focus:outline-none focus:border-[#D4AF37] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
+                      >
+                        <option value="" className="bg-[#121218] text-gray-400">
+                          {!selectedDivision
+                            ? (language === 'bn' ? 'আগে বিভাগ বেছে নিন' : 'Select Division first')
+                            : (language === 'bn' ? 'জেলা বেছে নিন' : 'Select District')}
+                        </option>
+                        {filteredDistricts.map((dist) => (
+                          <option key={dist.id} value={dist.id} className="bg-[#121218] text-white">
+                            {language === 'bn' ? `${dist.nameBn} (${dist.nameEn})` : `${dist.nameEn} (${dist.nameBn})`}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                    {formErrors.district && (
+                      <span className="text-[11px] text-red-400 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.district}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Upazila / Police Station (থানা / উপজেলা) */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-gray-300">
+                      {language === 'bn' ? 'থানা / উপজেলা (Upazila) *' : 'Upazila / Thana (থানা) *'}
+                    </label>
+                    <div className="relative">
+                      <Navigation className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                      <input
+                        type="text"
+                        list="bd-upazila-options"
+                        value={upazila}
+                        onChange={(e) => {
+                          setUpazila(e.target.value);
+                          if (formErrors.upazila) {
+                            setFormErrors((prev) => ({ ...prev, upazila: '' }));
+                          }
+                        }}
+                        placeholder={language === 'bn' ? 'থানা বা উপজেলার নাম লিখুন' : 'e.g. Banani, Savar, Sadar'}
+                        className={`w-full min-h-[46px] bg-[#121218] border ${
+                          formErrors.upazila ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-[#2A2A36]'
+                        } rounded-xl pl-9 pr-3.5 py-3 text-base sm:text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] transition-colors`}
+                      />
+                      <datalist id="bd-upazila-options">
+                        {suggestedUpazilas.map((u) => (
+                          <option key={u} value={u} />
+                        ))}
+                      </datalist>
+                    </div>
+                    {formErrors.upazila && (
+                      <span className="text-[11px] text-red-400 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.upazila}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Detailed Delivery Address */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-gray-300">
+                    {language === 'bn' ? 'বিস্তারিত ডেলিভারি ঠিকানা (বাড়ি, রোড, গ্রাম/এলাকা) *' : 'Detailed Delivery Address (House, Road, Area/Village) *'}
+                  </label>
+                  <div className="relative">
+                    <MapPin className="w-4 h-4 absolute left-3.5 top-3.5 text-gray-500 pointer-events-none" />
+                    <textarea
+                      rows={2}
+                      value={fullAddress}
+                      onChange={(e) => {
+                        setFullAddress(e.target.value);
+                        if (formErrors.fullAddress) {
+                          setFormErrors((prev) => ({ ...prev, fullAddress: '' }));
+                        }
+                      }}
+                      placeholder={language === 'bn' ? 'বাড়ি/ফ্ল্যাট নং, রোড নং, গ্রাম বা এলাকার বিস্তারিত ঠিকানা লিখুন' : 'House #, Flat #, Road #, Block, Area or Village'}
+                      className={`w-full bg-[#121218] border ${
+                        formErrors.fullAddress ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-[#2A2A36]'
+                      } rounded-xl pl-10 pr-4 py-3 text-base sm:text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] transition-colors`}
+                    />
+                  </div>
+                  {formErrors.fullAddress && (
+                    <span className="text-[11px] text-red-400 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.fullAddress}
+                    </span>
+                  )}
+                </div>
+
+                {user && !user.isGuest && !hasCompleteSavedProfile && (
+                  <p className="text-[11px] text-emerald-400/90 flex items-center gap-1.5 pt-1">
+                    <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      {language === 'bn'
+                        ? 'অর্ডার কনফার্ম করলেই আপনার এই ঠিকানা ও তথ্য পরবর্তী অর্ডারের জন্য অটো-সেভ হয়ে যাবে।'
+                        : 'These details will automatically save to your profile for 1-click repeat orders.'}
+                    </span>
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* SECTION 2: ORDER ITEMS & QUANTITY CONTROLS */}

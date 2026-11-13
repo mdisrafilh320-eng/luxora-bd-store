@@ -275,19 +275,42 @@ export const AccountView: React.FC = () => {
             <div className="space-y-4 text-xs">
               <div>
                 <span className="text-gray-500 block mb-1">Full Name</span>
-                <span className="text-white font-semibold text-sm">{userProfile?.name || 'Not Set'}</span>
+                <span className="text-white font-semibold text-sm">
+                  {userProfile?.defaultDeliveryInfo?.fullName || userProfile?.name || 'Not Set'}
+                </span>
               </div>
               <div>
                 <span className="text-gray-500 block mb-1">Email Address</span>
-                <span className="text-white font-semibold">{currentUser.email || 'N/A'}</span>
+                <span className="text-white font-semibold">
+                  {currentUser.email || userProfile?.defaultDeliveryInfo?.email || 'N/A'}
+                </span>
               </div>
               <div>
                 <span className="text-gray-500 block mb-1">Phone Number</span>
-                <span className="text-white font-semibold">{currentUser.phoneNumber || 'N/A'}</span>
+                <span className="text-white font-semibold">
+                  {userProfile?.defaultDeliveryInfo?.phoneNumber || currentUser.phoneNumber || 'Not Set'}
+                </span>
               </div>
+              {userProfile?.defaultDeliveryInfo && (
+                <div>
+                  <span className="text-gray-500 block mb-1">
+                    {language === 'bn' ? 'সংরক্ষিত ডেলিভারি ঠিকানা' : 'Saved Delivery Address'}
+                  </span>
+                  <span className="text-gray-200 leading-relaxed block">
+                    {[
+                      userProfile.defaultDeliveryInfo.detailedAddress,
+                      userProfile.defaultDeliveryInfo.upazila,
+                      userProfile.defaultDeliveryInfo.districtName || userProfile.defaultDeliveryInfo.district,
+                      userProfile.defaultDeliveryInfo.divisionName || userProfile.defaultDeliveryInfo.division,
+                    ]
+                      .filter(Boolean)
+                      .join(', ')}
+                  </span>
+                </div>
+              )}
               <div>
-                <span className="text-gray-500 block mb-1">VIP Tier</span>
-                <span className="gold-text font-bold uppercase">Gold Concierge Member</span>
+                <span className="text-gray-500 block mb-1">Membership Tier</span>
+                <span className="gold-text font-bold uppercase">{userProfile?.membershipTier || 'Standard'} Member</span>
               </div>
             </div>
           </div>
