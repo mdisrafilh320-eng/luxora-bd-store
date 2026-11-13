@@ -12,6 +12,7 @@ export const WishlistDrawer: React.FC = () => {
     wishlist,
     toggleWishlist,
     addToCart,
+    setQuickViewProduct,
     language,
     t
   } = useApp();
@@ -93,12 +94,22 @@ export const WishlistDrawer: React.FC = () => {
                         src={product.image}
                         alt={title}
                         referrerPolicy="no-referrer"
-                        className="w-20 h-20 object-cover rounded-sm border border-white/5 bg-black"
+                        onClick={() => {
+                          setIsWishlistOpen(false);
+                          setQuickViewProduct(product);
+                        }}
+                        className="w-20 h-20 object-cover rounded-sm border border-white/5 bg-black cursor-pointer hover:opacity-85 transition-opacity"
                       />
                       <div className="flex-1 min-w-0 flex flex-col justify-between">
                         <div>
                           <div className="flex items-start justify-between gap-2">
-                            <h4 className="text-xs font-semibold text-[#EDEDED] line-clamp-2 leading-snug">
+                            <h4
+                              onClick={() => {
+                                setIsWishlistOpen(false);
+                                setQuickViewProduct(product);
+                              }}
+                              className="text-xs font-semibold text-[#EDEDED] hover:text-[#D4AF37] line-clamp-2 leading-snug cursor-pointer transition-colors"
+                            >
                               {title}
                             </h4>
                             <button

@@ -123,7 +123,8 @@ export function subscribeToProducts(
       (snapshot) => {
         const items: Product[] = [];
         snapshot.forEach((docSnap) => {
-          items.push(docSnap.data() as Product);
+          const data = docSnap.data() as Product;
+          items.push({ ...data, id: data?.id || docSnap.id });
         });
 
         // Always update with live cloud items
@@ -136,12 +137,16 @@ export function subscribeToProducts(
             .then((altSnap) => {
               if (!altSnap.empty) {
                 const altItems: Product[] = [];
-                altSnap.forEach((d) => altItems.push(d.data() as Product));
+                altSnap.forEach((d) => {
+                  const data = d.data() as Product;
+                  altItems.push({ ...data, id: data?.id || d.id });
+                });
                 setLocalCachedProducts(altItems);
                 onUpdate(altItems);
               } else {
-                const cached = getLocalCachedProducts();
-                onUpdate(cached);
+                // Cloud catalog is genuinely empty (all products deleted) -> clear cache & show empty
+                setLocalCachedProducts([]);
+                onUpdate([]);
               }
             })
             .catch(() => {
@@ -180,19 +185,24 @@ export async function getProducts(): Promise<Product[]> {
         if (!altSnap.empty) {
           const altItems: Product[] = [];
           altSnap.forEach((docSnap) => {
-            altItems.push(docSnap.data() as Product);
+            const data = docSnap.data() as Product;
+            altItems.push({ ...data, id: data?.id || docSnap.id });
           });
           setLocalCachedProducts(altItems);
           return altItems;
         }
-      } catch {}
-      const cached = getLocalCachedProducts();
-      return cached;
+        // Both cloud collections are empty -> clear local cache
+        setLocalCachedProducts([]);
+        return [];
+      } catch {
+        return getLocalCachedProducts();
+      }
     }
     
     const items: Product[] = [];
     snap.forEach((docSnap) => {
-      items.push(docSnap.data() as Product);
+      const data = docSnap.data() as Product;
+      items.push({ ...data, id: data?.id || docSnap.id });
     });
 
     setLocalCachedProducts(items);
@@ -432,24 +442,46 @@ export async function updateProductStock(productId: string, newStock: number): P
 
 /**
  * Delete a product from the catalog (Admin ERP)
+ * Deletes from `products/{productId}` (plus `luxora-products` mirror and local cache)
  */
 export async function deleteProduct(productId: string): Promise<void> {
   const cleanId = productId.replace(/[^a-zA-Z0-9_.@-]/g, '_');
+
+  // Remove from local cache immediately for instant UI consistency
+  const currentCached = getLocalCachedProducts();
+  const updatedCache = currentCached.filter((p) => p.id !== cleanId && p.id !== productId);
+  setLocalCachedProducts(updatedCache);
+
   try {
-    const docRef = doc(db, PRODUCTS_COLLECTION, cleanId);
-    await deleteDoc(docRef);
+    const deleteTasks: Promise<any>[] = [
+      deleteDoc(doc(db, PRODUCTS_COLLECTION, cleanId)),
+    ];
 
+    if (productId !== cleanId) {
+      deleteTasks.push(deleteDoc(doc(db, PRODUCTS_COLLECTION, productId)));
+    }
+
+    // Also delete from mirror collection
+    deleteTasks.push(deleteDoc(doc(db, 'luxora-products', cleanId)).catch(() => {}));
+    if (productId !== cleanId) {
+      deleteTasks.push(deleteDoc(doc(db, 'luxora-products', productId)).catch(() => {}));
+    }
+
+    // Watchdog in case any secondary deletion hangs, primary products/{id} is awaited cleanly
+    await Promise.all(deleteTasks);
+
+    // Double check if any doc with matching `id` field existed under an auto-generated docId
     try {
-      const aliasRef = doc(db, 'luxora-products', cleanId);
-      await deleteDoc(aliasRef);
+      const q = query(collection(db, PRODUCTS_COLLECTION), where('id', '==', productId));
+      const matchedSnap = await getDocs(q);
+      for (const matchedDoc of matchedSnap.docs) {
+        await deleteDoc(matchedDoc.ref);
+      }
     } catch {}
-
-    // Remove from local cache
-    const currentCached = getLocalCachedProducts();
-    const updated = currentCached.filter((p) => p.id !== cleanId && p.id !== productId);
-    setLocalCachedProducts(updated);
-  } catch (error) {
+  } catch (error: any) {
+    console.error('Error in deleteProduct:', error);
     handleFirestoreError(error, OperationType.DELETE, `${PRODUCTS_COLLECTION}/${cleanId}`);
+    throw error;
   }
 }
 

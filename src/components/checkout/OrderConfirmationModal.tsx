@@ -212,8 +212,14 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
                 <p className="text-white print:text-black flex items-start gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-gray-500 shrink-0 mt-0.5" />
                   <span>
-                    {order.customer.shippingAddress}, {order.customer.district}
-                    {order.customer.division ? `, ${order.customer.division}` : ''}
+                    {[
+                      order.customer.shippingAddress,
+                      order.customer.upazila,
+                      order.customer.district,
+                      order.customer.division,
+                    ]
+                      .filter(Boolean)
+                      .join(', ')}
                   </span>
                 </p>
                 {order.customer.notes && (

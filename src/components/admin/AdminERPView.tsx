@@ -34,7 +34,8 @@ import {
   Wallet,
   Crown,
   LogOut,
-  UserCheck
+  UserCheck,
+  MapPin
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Order, Product, OrderStatus, PaymentStatus, ProductCategory } from '../../types';
@@ -96,6 +97,8 @@ export const AdminERPView: React.FC = () => {
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isSavingProduct, setIsSavingProduct] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [isDeletingProduct, setIsDeletingProduct] = useState(false);
   const [productFormData, setProductFormData] = useState<Partial<Product>>({
     nameEn: '',
     nameBn: '',
@@ -434,21 +437,26 @@ export const AdminERPView: React.FC = () => {
     }
   };
 
-  const handleDeleteProduct = async (productId: string, name: string) => {
-    if (!window.confirm(`Are you sure you want to remove "${name}" from the luxury catalog?`)) {
-      return;
-    }
+  const handleDeleteProduct = (productId: string, name: string) => {
+    setProductToDelete({ id: productId, name });
+  };
+
+  const confirmDeleteProduct = async () => {
+    if (!productToDelete) return;
+    const { id: productId, name } = productToDelete;
+    setIsDeletingProduct(true);
+
     try {
       await productService.deleteProduct(productId);
       removeProductFromState(productId);
+      setProductToDelete(null);
       addToast({
         type: 'info',
         titleEn: 'Product Removed',
         titleBn: 'পণ্য মুছে ফেলা হয়েছে',
-        descriptionEn: `${name} has been deleted from catalog`,
-        descriptionBn: `${name} ক্যাটালগ থেকে বাদ দেওয়া হয়েছে`,
+        descriptionEn: `"${name}" has been deleted from the catalog.`,
+        descriptionBn: `"${name}" ক্যাটালগ থেকে মুছে ফেলা হয়েছে।`,
       });
-      await refreshProducts();
     } catch (err: any) {
       console.error('Product delete error:', err);
       addToast({
@@ -457,6 +465,8 @@ export const AdminERPView: React.FC = () => {
         titleBn: 'পণ্য মুছে ফেলা ব্যর্থ হয়েছে',
         descriptionEn: err?.message || 'Could not delete product from Firestore catalog.',
       });
+    } finally {
+      setIsDeletingProduct(false);
     }
   };
 
@@ -1001,8 +1011,13 @@ export const AdminERPView: React.FC = () => {
                             <td className="py-4 px-4">
                               <div className="font-medium text-white">{order.customer?.name || 'Guest'}</div>
                               <div className="text-xs text-neutral-400 font-mono">{order.customer?.phone}</div>
-                              <div className="text-[11px] text-neutral-500 truncate max-w-[160px]">
-                                {order.customer?.district}, {order.customer?.shippingAddress}
+                              <div className="text-[11px] text-[#D4AF37]/90 font-medium truncate max-w-[210px] mt-0.5">
+                                {[order.customer?.upazila, order.customer?.district, order.customer?.division]
+                                  .filter(Boolean)
+                                  .join(', ') || 'Bangladesh'}
+                              </div>
+                              <div className="text-[11px] text-neutral-500 truncate max-w-[210px]" title={order.customer?.shippingAddress}>
+                                {order.customer?.shippingAddress}
                               </div>
                             </td>
 
@@ -1260,8 +1275,9 @@ export const AdminERPView: React.FC = () => {
                           </button>
 
                           <button
+                            type="button"
                             onClick={() => handleDeleteProduct(prod.id, prod.nameEn)}
-                            className="p-1.5 rounded-lg bg-[#1A1C24] hover:bg-rose-500/20 border border-neutral-800 hover:border-rose-500/40 text-neutral-400 hover:text-rose-400 transition-all"
+                            className="p-1.5 rounded-lg bg-[#1A1C24] hover:bg-rose-500/20 border border-neutral-800 hover:border-rose-500/40 text-neutral-400 hover:text-rose-400 transition-all cursor-pointer"
                             title="Delete Product"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1500,32 +1516,33 @@ export const AdminERPView: React.FC = () => {
           <AdminManagementTab />
         )}
 
-        {/* ----------------- PAYMENT VERIFICATION MODAL ----------------- */}
+        {/* ----------------- PAYMENT VERIFICATION & ORDER DETAILS MODAL ----------------- */}
         {selectedOrderForVerification && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="w-full max-w-2xl bg-[#12141A] border border-[#D4AF37]/30 rounded-2xl shadow-2xl overflow-hidden space-y-5 p-6 animate-scaleUp">
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+            <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[#12141A] border border-[#D4AF37]/30 rounded-2xl shadow-2xl space-y-5 p-6 animate-scaleUp">
               <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
                 <div className="flex items-center gap-2">
                   <div className="w-9 h-9 rounded-xl bg-[#D4AF37]/15 flex items-center justify-center text-[#D4AF37]">
                     <ShieldCheck className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-base font-semibold text-white">MFS Payment Manual Verification</h3>
+                    <h3 className="text-base font-semibold text-white">Order Details & Payment Verification</h3>
                     <p className="text-xs text-neutral-400">Order: {selectedOrderForVerification.id}</p>
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setSelectedOrderForVerification(null)}
-                  className="text-neutral-400 hover:text-white p-1"
+                  className="text-neutral-400 hover:text-white p-1 cursor-pointer"
                 >
                   <XCircle className="w-5 h-5" />
                 </button>
               </div>
 
               {/* Order & Payment Details */}
-              <div className="grid grid-cols-2 gap-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div className="p-3.5 rounded-xl bg-[#161822] border border-neutral-800 space-y-1">
-                  <span className="text-neutral-400 block text-[11px]">Customer & Sender</span>
+                  <span className="text-neutral-400 block text-[11px]">Customer & Contact</span>
                   <div className="font-semibold text-white">{selectedOrderForVerification.customer?.name}</div>
                   <div className="font-mono text-neutral-300">{selectedOrderForVerification.customer?.phone}</div>
                 </div>
@@ -1540,6 +1557,57 @@ export const AdminERPView: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Structured Delivery Address Breakdown */}
+              <div className="p-4 rounded-xl bg-[#161822] border border-neutral-800 space-y-3 text-xs">
+                <div className="flex items-center gap-2 text-[#D4AF37] font-semibold">
+                  <MapPin className="w-4 h-4" />
+                  <span>{language === 'bn' ? 'ডেলিভারি ঠিকানার বিস্তারিত' : 'Delivery Address Details'}</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div className="p-2.5 rounded-lg bg-[#0E1015] border border-neutral-800/80">
+                    <span className="text-[10px] text-neutral-500 block uppercase">বিভাগ (Division)</span>
+                    <span className="text-white font-medium">{selectedOrderForVerification.customer?.division || '—'}</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-[#0E1015] border border-neutral-800/80">
+                    <span className="text-[10px] text-neutral-500 block uppercase">জেলা (District)</span>
+                    <span className="text-white font-medium">{selectedOrderForVerification.customer?.district || '—'}</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-[#0E1015] border border-neutral-800/80">
+                    <span className="text-[10px] text-neutral-500 block uppercase">থানা (Upazila)</span>
+                    <span className="text-white font-medium">{selectedOrderForVerification.customer?.upazila || '—'}</span>
+                  </div>
+                </div>
+                <div className="p-2.5 rounded-lg bg-[#0E1015] border border-neutral-800/80">
+                  <span className="text-[10px] text-neutral-500 block uppercase">বিস্তারিত ঠিকানা (Detailed Address)</span>
+                  <span className="text-neutral-200 leading-relaxed">{selectedOrderForVerification.customer?.shippingAddress || '—'}</span>
+                </div>
+              </div>
+
+              {/* Ordered Items */}
+              {selectedOrderForVerification.items?.length > 0 && (
+                <div className="space-y-2 text-xs">
+                  <span className="text-neutral-400 block">Ordered Items ({selectedOrderForVerification.items.length}):</span>
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                    {selectedOrderForVerification.items.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-[#161822] border border-neutral-800/80">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <img src={item.image} alt={item.nameEn} referrerPolicy="no-referrer" className="w-8 h-8 rounded object-cover border border-neutral-700 shrink-0" />
+                          <div className="truncate">
+                            <span className="text-white font-medium truncate block">{item.nameEn}</span>
+                            <span className="text-[10px] text-neutral-400 font-mono">
+                              Qty: {item.quantity}{item.selectedColor ? ` • ${item.selectedColor}` : ''}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="font-mono text-[#D4AF37] font-semibold shrink-0">
+                          ৳{(item.price * item.quantity).toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* MFS TrxID Review Box */}
               <div className="p-4 rounded-xl bg-[#0E1015] border border-[#D4AF37]/30 space-y-2">
@@ -1873,6 +1941,60 @@ export const AdminERPView: React.FC = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* ----------------- DELETE PRODUCT CONFIRMATION MODAL ----------------- */}
+        {productToDelete && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="w-full max-w-md bg-[#12141A] border border-rose-500/40 rounded-2xl shadow-2xl p-6 space-y-4 animate-scaleUp">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-white">
+                    {language === 'bn' ? 'পণ্য মুছে ফেলার নিশ্চিতকরণ' : 'Delete Catalog Product'}
+                  </h3>
+                  <p className="text-xs text-neutral-400 font-mono">ID: {productToDelete.id}</p>
+                </div>
+              </div>
+
+              <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed">
+                {language === 'bn'
+                  ? `আপনি কি নিশ্চিতভাবে "${productToDelete.name}" পণ্যটি ক্যাটালগ থেকে স্থায়ীভাবে মুছে ফেলতে চান?`
+                  : `Are you sure you want to permanently remove "${productToDelete.name}" from the luxury catalog?`}
+              </p>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-neutral-800">
+                <button
+                  type="button"
+                  disabled={isDeletingProduct}
+                  onClick={() => setProductToDelete(null)}
+                  className="px-4 py-2 rounded-xl bg-[#1A1C24] hover:bg-[#232632] text-neutral-300 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {language === 'bn' ? 'বাতিল করুন' : 'Cancel'}
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeletingProduct}
+                  onClick={confirmDeleteProduct}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-lg shadow-rose-600/20 transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isDeletingProduct ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>{language === 'bn' ? 'মুছে ফেলা হচ্ছে...' : 'Deleting...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>{language === 'bn' ? 'হ্যাঁ, মুছে ফেলুন' : 'Delete Product'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}

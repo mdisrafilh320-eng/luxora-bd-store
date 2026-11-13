@@ -127,3 +127,44 @@ export function getDeliveryTime(districtId: string, language: 'en' | 'bn' = 'en'
   if (!district) return language === 'bn' ? '২৪-৭২ ঘণ্টা' : '24-72 Hours';
   return language === 'bn' ? district.deliveryTimeBn : district.deliveryTimeEn;
 }
+
+export const BD_UPAZILAS_BY_DISTRICT: Record<string, string[]> = {
+  dhaka: [
+    'Dhanmondi', 'Gulshan', 'Banani', 'Uttara', 'Mirpur', 'Mohammadpur', 'Motijheel',
+    'Badda', 'Rampura', 'Khilgaon', 'Bashundhara R/A', 'Tejgaon', 'Farmgate',
+    'Shahbagh', 'Paltan', 'Wari', 'Jatrabari', 'Lalbagh', 'Savar', 'Ashulia',
+    'Keraniganj', 'Dhamrai', 'Dohar', 'Nawabganj'
+  ],
+  gazipur: ['Gazipur Sadar', 'Tongi', 'Kaliakair', 'Kaliganj', 'Kapasia', 'Sreepur'],
+  narayanganj: ['Narayanganj Sadar', 'Fatullah', 'Siddhirganj', 'Bandar', 'Araihazar', 'Rupganj', 'Sonargaon'],
+  chattogram: [
+    'Kotwali', 'Panchlaish', 'Khulshi', 'Halishahar', 'Agrabad / Double Mooring', 'Patenga',
+    'Pahartali', 'Bakalia', 'Bayezid Bostami', 'Chandgaon', 'Hathazari', 'Raozan',
+    'Sitakunda', 'Patiya', 'Mirsharai', 'Anwara', 'Boalkhali', 'Satkania'
+  ],
+  coxsbazar: ["Cox's Bazar Sadar", 'Chakaria', 'Teknaf', 'Ukhiya', 'Ramu', 'Maheshkhali', 'Pekua', 'Kutubdia'],
+  cumilla: ['Cumilla Sadar', 'Cumilla Sadar Dakshin', 'Daudkandi', 'Chandina', 'Laksam', 'Muradnagar', 'Debidwar', 'Chauddagram'],
+  sylhet: ['Sylhet Sadar', 'Shahjalal Upashahar', 'Amberkhana', 'Zindabazar', 'Beanibazar', 'Golapganj', 'Bishwanath', 'Zakiganj', 'Osmani Nagar'],
+  rajshahi: ['Boalia (Rajshahi Sadar)', 'Motihar', 'Shah Makhdum', 'Paba', 'Godagari', 'Bagha', 'Charghat', 'Puthia', 'Tanore'],
+  khulna: ['Khulna Sadar', 'Sonadanga', 'Khalishpur', 'Daulatpur', 'Dumuria', 'Batiaghata', 'Phultala', 'Rupsha'],
+  barishal: ['Barishal Sadar', 'Bakerganj', 'Babuganj', 'Banaripara', 'Gournadi', 'Mehendiganj', 'Muladi', 'Wazirpur'],
+  bhola: ['Bhola Sadar', 'Borhanuddin', 'Char Fasson', 'Daulatkhan', 'Lalmohan', 'Manpura', 'Tazumuddin'],
+  rangpur: ['Rangpur Sadar', 'Badarganj', 'Gangachara', 'Kaunia', 'Mithapukur', 'Pirgachha', 'Pirganj', 'Taraganj'],
+  mymensingh: ['Mymensingh Sadar', 'Bhaluka', 'Trishal', 'Muktagachha', 'Fulbaria', 'Gaffargaon', 'Gauripur', 'Ishwarganj'],
+  bogura: ['Bogura Sadar', 'Sherpur', 'Shajahanpur', 'Adamdighi', 'Dhunat', 'Dupchanchia', 'Gabtali', 'Nandigram'],
+  jashore: ['Jashore Sadar', 'Abhaynagar', 'Bagherpara', 'Chaugachha', 'Jhikargachha', 'Keshabpur', 'Manirampur', 'Sharsha'],
+};
+
+export function getUpazilasForDistrict(districtId: string): string[] {
+  if (!districtId) return [];
+  const key = districtId.toLowerCase();
+  if (BD_UPAZILAS_BY_DISTRICT[key]) {
+    return BD_UPAZILAS_BY_DISTRICT[key];
+  }
+  const dist = BD_DISTRICTS.find(d => d.id === key || d.nameEn.toLowerCase() === key);
+  if (dist) {
+    return [`${dist.nameEn} Sadar`];
+  }
+  return [];
+}
+

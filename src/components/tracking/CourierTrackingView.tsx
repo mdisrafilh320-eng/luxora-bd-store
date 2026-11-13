@@ -386,7 +386,9 @@ export const CourierTrackingView: React.FC<CourierTrackingViewProps> = ({
                     <span className="text-gray-500 block text-[10px] uppercase">Shipping Address:</span>
                     <p className="text-gray-300 leading-relaxed">{currentOrder.customer.shippingAddress}</p>
                     <span className="inline-block mt-1 px-2 py-0.5 rounded bg-[#1C1C26] text-[10px] font-mono text-[#D4AF37] font-semibold">
-                      {currentOrder.customer.district || 'Dhaka'}
+                      {[currentOrder.customer.upazila, currentOrder.customer.district, currentOrder.customer.division]
+                        .filter(Boolean)
+                        .join(', ') || 'Bangladesh'}
                     </span>
                   </div>
                   {currentOrder.customer.notes && (

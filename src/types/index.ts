@@ -42,6 +42,8 @@ export interface Product {
   badge?: 'bestseller' | 'new' | 'limited' | 'sale';
   isFeatured?: boolean;
   colors?: { name: string; hex: string }[];
+  sizes?: string[];
+  variants?: string[];
   sku?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -165,6 +167,7 @@ export interface OrderCustomer {
   email?: string;
   division?: string;
   district: string;
+  upazila?: string;
   shippingAddress: string;
   notes?: string;
 }
