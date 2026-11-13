@@ -1,13 +1,35 @@
 export type Language = 'en' | 'bn';
 
-export type ProductCategory = 
-  | 'all'
-  | 'audio'
-  | 'wearables'
-  | 'desk-charging'
-  | 'apple-ecosystem'
-  | 'photography'
-  | 'lifestyle';
+export type ProductCategory = string;
+
+export interface HeroBannerItem {
+  id: string;
+  titleEn: string;
+  titleBn: string;
+  subtitleEn: string;
+  subtitleBn: string;
+  ctaTextEn?: string;
+  ctaTextBn?: string;
+  targetCategory?: string;
+  imageUrl: string;
+  order: number;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ReturnPolicyConfig {
+  titleEn: string;
+  titleBn: string;
+  summaryEn: string;
+  summaryBn: string;
+  stepsEn: string[];
+  stepsBn: string[];
+  eligibilityNotesEn?: string;
+  eligibilityNotesBn?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}
 
 export interface ProductSpec {
   labelEn: string;
@@ -24,6 +46,7 @@ export interface Product {
   taglineBn: string;
   brand: string;
   category: ProductCategory;
+  freeDelivery?: boolean;
   price: number; // In BDT (৳)
   originalPrice?: number;
   rating: number; // e.g. 4.9

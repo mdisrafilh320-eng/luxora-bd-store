@@ -87,34 +87,34 @@ export const AccountView: React.FC = () => {
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <div className="w-full max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 pt-6 pb-28 md:py-10">
       {/* Back button */}
       <button
         onClick={() => setActiveView('store')}
-        className="text-xs text-gray-400 hover:text-white flex items-center gap-1.5 mb-6 transition-colors cursor-pointer"
+        className="min-h-[44px] text-xs text-gray-400 hover:text-white inline-flex items-center gap-1.5 mb-5 transition-colors cursor-pointer px-2 -ml-2 rounded-lg hover:bg-white/5"
       >
         <ArrowLeft className="w-4 h-4" />
         <span>{language === 'bn' ? 'স্টোরে ফিরে যান' : 'Back to Boutique'}</span>
       </button>
 
       {/* Header Profile Banner */}
-      <div className="card-bg border border-[#1E1E24] rounded-3xl p-6 sm:p-8 mb-8 relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-6 shadow-2xl">
+      <div className="card-bg border border-[#1E1E24] rounded-2xl sm:rounded-3xl p-5 sm:p-8 mb-6 sm:mb-8 relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-5 shadow-2xl">
         <div className="absolute top-0 inset-x-0 h-1 gold-bg" />
         
-        <div className="flex items-center gap-5">
-          <div className="w-16 h-16 rounded-2xl slate-bg border border-white/10 flex items-center justify-center text-xl font-bold font-luxury gold-text shadow-lg">
+        <div className="flex items-center gap-4 sm:gap-5 min-w-0">
+          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl slate-bg border border-white/10 flex items-center justify-center text-xl font-bold font-luxury gold-text shadow-lg shrink-0">
             {userProfile?.name ? userProfile.name.charAt(0).toUpperCase() : 'VIP'}
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-white font-sans">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-lg sm:text-xl font-bold text-white font-sans truncate">
                 {userProfile?.name || currentUser.email || 'Valued Member'}
               </h1>
-              <span className="px-2.5 py-0.5 rounded-full gold-bg text-black text-[10px] font-black uppercase tracking-wider">
+              <span className="px-2.5 py-0.5 rounded-md gold-bg text-black text-[10px] font-black uppercase tracking-wider shrink-0">
                 VIP LUXE
               </span>
             </div>
-            <p className="text-xs text-gray-400 mt-1 font-mono">
+            <p className="text-xs text-gray-400 mt-1 font-mono truncate">
               {currentUser.email || currentUser.phoneNumber || 'Authenticated User'}
             </p>
           </div>
@@ -122,7 +122,7 @@ export const AccountView: React.FC = () => {
 
         <button
           onClick={handleLogout}
-          className="slate-bg border border-white/10 hover:border-red-500/40 hover:text-red-400 text-gray-300 text-xs font-semibold px-5 py-2.5 rounded-full flex items-center gap-2 transition-colors cursor-pointer self-start sm:self-auto"
+          className="min-h-[44px] slate-bg border border-white/10 hover:border-red-500/40 hover:text-red-400 text-gray-300 text-xs font-semibold px-5 py-2.5 rounded-full flex items-center justify-center gap-2 transition-colors cursor-pointer self-start sm:self-auto shrink-0"
         >
           <LogOut className="w-3.5 h-3.5" />
           <span>{language === 'bn' ? 'লগ আউট' : 'Sign Out'}</span>
@@ -130,10 +130,10 @@ export const AccountView: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-[#1E1E24] mb-8">
+      <div className="flex border-b border-[#1E1E24] mb-6 sm:mb-8 overflow-x-auto no-scrollbar">
         <button
           onClick={() => setActiveTab('orders')}
-          className={`pb-3 px-5 text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+          className={`min-h-[44px] pb-3 px-4 sm:px-5 text-xs font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
             activeTab === 'orders'
               ? 'gold-text border-b-2 gold-border'
               : 'text-gray-400 hover:text-white'
@@ -142,7 +142,7 @@ export const AccountView: React.FC = () => {
           <Package className="w-4 h-4" />
           <span>{language === 'bn' ? 'অর্ডার হিস্টোরি' : 'Orders & Shipments'}</span>
           {orders.length > 0 && (
-            <span className="w-5 h-5 rounded-full slate-bg border border-white/10 text-[10px] flex items-center justify-center font-mono">
+            <span className="w-5 h-5 rounded-full slate-bg border border-white/10 text-[10px] flex items-center justify-center font-mono tabular-nums">
               {orders.length}
             </span>
           )}
@@ -150,7 +150,7 @@ export const AccountView: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('profile')}
-          className={`pb-3 px-5 text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+          className={`min-h-[44px] pb-3 px-4 sm:px-5 text-xs font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
             activeTab === 'profile'
               ? 'gold-text border-b-2 gold-border'
               : 'text-gray-400 hover:text-white'

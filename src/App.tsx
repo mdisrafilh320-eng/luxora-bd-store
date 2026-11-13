@@ -5,12 +5,11 @@ import { Footer } from './components/common/Footer';
 import { BottomNav } from './components/common/BottomNav';
 import { TrustBadges } from './components/common/TrustBadges';
 import { HeroBanner } from './components/store/HeroBanner';
-import { CategoryGrid } from './components/store/CategoryGrid';
-import { FeaturedShowcase } from './components/store/FeaturedShowcase';
 import { CatalogHub } from './components/store/CatalogHub';
 import { CartDrawer } from './components/store/CartDrawer';
 import { WishlistDrawer } from './components/store/WishlistDrawer';
 import { ProductDetailModal } from './components/store/ProductDetailModal';
+import { ReturnPolicyModal } from './components/store/ReturnPolicyModal';
 import { AuthModal } from './components/store/AuthModal';
 import { AccountView } from './components/store/AccountView';
 import { CheckoutPage } from './components/checkout/CheckoutPage';
@@ -19,7 +18,6 @@ import { CustomerSupportHub } from './components/support/CustomerSupportHub';
 import { AIAssistantWidget } from './components/support/AIAssistantWidget';
 import { AdminAccessGate } from './components/admin/AdminAccessGate';
 import { ToastContainer } from './components/ui/ToastContainer';
-import { SectionHeader } from './components/ui/SectionHeader';
 import { DesignSystemExplorer } from './components/design-system/DesignSystemExplorer';
 
 const MainStoreContent: React.FC = () => {
@@ -140,36 +138,15 @@ const MainStoreContent: React.FC = () => {
   }
 
   return (
-    <main className="w-full max-w-full overflow-x-hidden pb-16 md:pb-0">
-      {/* 1. Minimalist Luxury Hero Section */}
+    <main className="w-full max-w-full overflow-x-clip pb-20 md:pb-0">
+      {/* 1. Full-Width Auto-Sliding Promotional Hero Banner */}
       <HeroBanner />
 
-      {/* 2. Top Trust Badges Bar */}
-      <TrustBadges variant="bar" />
+      {/* 2. Minimal Luxury Trust Badge Strip */}
+      <TrustBadges variant="minimal" />
 
-      {/* 3. Curated Category Domains Grid */}
-      <CategoryGrid />
-
-      {/* 4. Flagship Spotlight & Tabbed Showcase */}
-      <FeaturedShowcase />
-
-      {/* 5. Complete Minimalist Catalog Hub with Filters & Sorting */}
+      {/* 3. Search Bar, Dynamic Category Filter Bar & Minimalist Luxury Product Grid */}
       <CatalogHub />
-
-      {/* 6. Comprehensive Trust & Credibility Section */}
-      <section className="bg-[#08080A] border-t border-[#1E1E24] py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <SectionHeader
-            badge={language === 'bn' ? 'আমাদের প্রতিশ্রুতি' : 'THE LUXORA PROMISE'}
-            title={language === 'bn' ? 'বিশ্বস্ততা ও ১০০% অথেনটিসিটি' : 'Uncompromising Authenticity & Care'}
-            subtitle={language === 'bn' 
-              ? 'বাংলাদেশের গ্রাহকদের জন্য সম্পূর্ণ ঝুঁকিমুক্ত শপিং ও ২৪-৪৮ ঘণ্টায় ক্যাশ অন ডেলিভারি সার্ভিস।'
-              : 'Engineered for seamless doorstep commerce across all 64 districts in Bangladesh.'}
-            align="center"
-          />
-          <TrustBadges variant="grid" />
-        </div>
-      </section>
     </main>
   );
 };
@@ -177,7 +154,7 @@ const MainStoreContent: React.FC = () => {
 export default function App() {
   return (
     <AppProvider>
-      <div className="min-h-screen max-w-full overflow-x-hidden bg-[#0A0A0C] text-[#F3F4F6] flex flex-col font-sans selection:bg-[#D4AF37] selection:text-black relative">
+      <div className="min-h-screen max-w-full overflow-x-clip bg-[#0A0A0C] text-[#F3F4F6] flex flex-col font-sans selection:bg-[#D4AF37] selection:text-black relative">
         {/* Navigation Header */}
         <Header />
 
@@ -188,6 +165,7 @@ export default function App() {
         <CartDrawer />
         <WishlistDrawer />
         <ProductDetailModal />
+        <ReturnPolicyModal />
         <AuthModal />
         <ToastContainer />
 

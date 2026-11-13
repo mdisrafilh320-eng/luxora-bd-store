@@ -163,17 +163,15 @@ export const PaymentSettingsTab: React.FC = () => {
       });
       return;
     }
-    if (window.confirm(language === 'bn' ? 'আপনি কি ডিফল্ট পেমেন্ট সেটিংসে ফিরে যেতে চান?' : 'Are you sure you want to reset all payment settings to system defaults?')) {
-      setFormData(DEFAULT_PAYMENT_SETTINGS);
-      setFormErrors({});
-      addToast({
-        type: 'info',
-        titleEn: 'Reset to Defaults',
-        titleBn: 'ডিফল্ট সেটিংস লোড করা হয়েছে',
-        descriptionEn: 'Click "Save Changes" to persist default settings to Firestore.',
-        descriptionBn: 'ডাটাবেজে ডিফল্ট সেটিংস সংরক্ষণ করতে "Save Changes" বাটনে ক্লিক করুন।',
-      });
-    }
+    setFormData(DEFAULT_PAYMENT_SETTINGS);
+    setFormErrors({});
+    addToast({
+      type: 'info',
+      titleEn: 'Reset to Defaults',
+      titleBn: 'ডিফল্ট সেটিংস লোড করা হয়েছে',
+      descriptionEn: 'Click "Save Changes" to persist default settings to Firestore.',
+      descriptionBn: 'ডাটাবেজে ডিফল্ট সেটিংস সংরক্ষণ করতে "Save Changes" বাটনে ক্লিক করুন।',
+    });
   };
 
   const currentPreviewGw = formData.gateways[previewGateway];

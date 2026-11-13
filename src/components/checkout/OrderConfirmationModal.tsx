@@ -58,7 +58,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 overflow-y-auto max-w-full overflow-x-hidden bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 print:p-0 print:bg-white print:static">
+      <div className="fixed inset-0 z-50 overflow-y-auto max-w-full overflow-x-clip bg-black/85 backdrop-blur-md flex items-start sm:items-center justify-center p-3 sm:p-6 print:p-0 print:bg-white print:static">
         {/* Modal Backdrop */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -74,7 +74,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.94, opacity: 0, y: 20 }}
           transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-          className="relative w-full max-w-3xl card-bg border border-[#22222E] rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden z-10 text-[#EDEDED] print:border-none print:shadow-none print:text-black print:bg-white print:max-w-full"
+          className="relative my-auto w-full max-w-3xl card-bg border border-[#22222E] rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden z-10 text-[#EDEDED] print:border-none print:shadow-none print:text-black print:bg-white print:max-w-full"
         >
           {/* Top Gold Ribbon */}
           <div className="h-1.5 w-full gold-bg print:hidden" />
@@ -82,18 +82,18 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
           {/* Close button */}
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 p-2 rounded-full text-gray-400 hover:text-white hover:bg-white/10 transition-colors z-20 cursor-pointer print:hidden"
+            className="sticky sm:absolute top-3 right-3 sm:top-4 sm:right-4 ml-auto mt-2 mr-2 sm:m-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full text-gray-400 hover:text-white hover:bg-white/10 transition-colors z-20 cursor-pointer print:hidden"
             aria-label="Close modal"
           >
             <X className="w-5 h-5" />
           </button>
 
           {/* Printable Invoice Container */}
-          <div ref={printRef} className="p-6 sm:p-8 space-y-6 print:p-4 print:space-y-4">
+          <div ref={printRef} className="px-4 pb-5 pt-1 sm:p-8 space-y-5 sm:space-y-6 print:p-4 print:space-y-4">
             {/* Header / Success Indicator */}
-            <div className="text-center space-y-3 pb-6 border-b border-[#1E1E24] print:border-gray-200">
-              <div className="w-16 h-16 rounded-full gold-bg/15 border border-[#D4AF37]/40 flex items-center justify-center mx-auto text-[#D4AF37] print:hidden">
-                <CheckCircle2 className="w-9 h-9 animate-bounce" />
+            <div className="text-center space-y-3 pb-5 sm:pb-6 border-b border-[#1E1E24] print:border-gray-200">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full gold-bg/15 border border-[#D4AF37]/40 flex items-center justify-center mx-auto text-[#D4AF37] print:hidden">
+                <CheckCircle2 className="w-8 h-8 sm:w-9 sm:h-9" />
               </div>
 
               <div className="flex items-center justify-center gap-2">
@@ -115,15 +115,16 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
               </p>
 
               {/* Order ID Bar with Copy */}
-              <div className="inline-flex items-center gap-3 px-4 py-2 rounded-xl slate-bg border border-white/10 print:border-gray-300 print:bg-gray-50">
+              <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-2 sm:gap-3 px-3.5 py-2 rounded-xl slate-bg border border-white/10 print:border-gray-300 print:bg-gray-50">
                 <span className="text-xs text-gray-400 font-mono">ORDER ID:</span>
-                <span className="text-sm sm:text-base font-mono font-bold gold-text print:text-black">
+                <span className="text-sm sm:text-base font-mono font-bold gold-text break-all print:text-black">
                   {order.id}
                 </span>
                 <button
                   onClick={handleCopyOrderId}
-                  className="p-1 text-gray-400 hover:text-white transition-colors cursor-pointer print:hidden"
+                  className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer print:hidden"
                   title="Copy Order ID"
+                  aria-label="Copy Order ID"
                 >
                   {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                 </button>
@@ -177,8 +178,8 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
                   <ShieldCheck className="w-3.5 h-3.5 gold-text" />
                   <span>{language === 'bn' ? 'ভেরিফিকেশন' : 'Verification'}</span>
                 </div>
-                <div className="text-xs font-bold text-emerald-400 print:text-black flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <div className="text-xs font-bold text-emerald-400 print:text-black flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
                   {order.paymentDetails?.transactionId
                     ? (language === 'bn' ? 'TrxID যাচাইাধীন' : 'TrxID Under Review')
                     : (language === 'bn' ? 'অর্ডার প্রসেসিং' : 'Dispatch Processing')}
@@ -266,7 +267,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
             </div>
 
             {/* Financial Totals Breakdown */}
-            <div className="p-4 rounded-xl bg-[#14141A] border border-[#22222E] space-y-2 text-xs print:bg-gray-50 print:border-gray-200">
+            <div className="p-4 rounded-xl bg-[#14141A] border border-[#22222E] space-y-2 text-xs tabular-nums print:bg-gray-50 print:border-gray-200">
               <div className="flex justify-between text-gray-400 print:text-gray-600">
                 <span>{language === 'bn' ? 'সাবটোটাল' : 'Subtotal'}</span>
                 <span className="font-mono text-white print:text-black">{formatBDT(order.subtotal, language)}</span>
@@ -293,12 +294,12 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
 
               {/* Partial Payment Calculation Summary */}
               {order.paymentOption === 'partial_advance' && (
-                <div className="pt-2 border-t border-dashed border-[#333340] grid grid-cols-2 gap-2 text-xs font-mono">
-                  <div className="p-2 rounded bg-emerald-950/40 border border-emerald-800/40 text-emerald-300 print:text-black">
+                <div className="pt-2 border-t border-dashed border-[#333340] grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+                  <div className="p-2.5 rounded bg-emerald-950/40 border border-emerald-800/40 text-emerald-300 print:text-black">
                     <span className="block text-[10px] uppercase text-emerald-400">{language === 'bn' ? 'অগ্রিম পরিশোধ' : 'Advance Paid (MFS)'}</span>
                     <span className="font-bold text-sm">{formatBDT(advanceAmount, language)}</span>
                   </div>
-                  <div className="p-2 rounded bg-amber-950/40 border border-amber-800/40 text-amber-300 print:text-black">
+                  <div className="p-2.5 rounded bg-amber-950/40 border border-amber-800/40 text-amber-300 print:text-black">
                     <span className="block text-[10px] uppercase text-amber-400">{language === 'bn' ? 'ডেলিভারিতে প্রদেয়' : 'Payable on Delivery (COD)'}</span>
                     <span className="font-bold text-sm">{formatBDT(dueAmount, language)}</span>
                   </div>
@@ -315,39 +316,39 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
           </div>
 
           {/* Action Footer (Hidden during Print) */}
-          <div className="p-5 sm:p-6 bg-[#121218] border-t border-[#20202A] flex flex-col sm:flex-row items-center justify-between gap-3 print:hidden">
+          <div className="p-4 sm:p-6 bg-[#121218] border-t border-[#20202A] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 print:hidden">
             <button
               onClick={handlePrint}
-              className="w-full sm:w-auto slate-bg border border-white/10 hover:border-white/20 text-gray-300 hover:text-white text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              className="w-full sm:w-auto min-h-[44px] slate-bg border border-white/10 hover:border-white/20 text-gray-300 hover:text-white text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer"
             >
               <Printer className="w-4 h-4" />
               <span>{language === 'bn' ? 'ইনভয়েস প্রিন্ট' : 'Print Invoice'}</span>
             </button>
 
-            <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2.5 w-full sm:w-auto">
               <button
                 onClick={() => {
                   onClose();
                   // Trigger direct tracking
                   window.location.search = `?track=${order.id}`;
                 }}
-                className="flex-1 sm:flex-initial slate-bg border border-[#D4AF37]/50 text-[#D4AF37] hover:bg-[#D4AF37]/10 text-xs font-bold px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                className="min-h-[44px] slate-bg border border-[#D4AF37]/50 text-[#D4AF37] hover:bg-[#D4AF37]/10 text-xs font-bold px-3 sm:px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 sm:gap-2 transition-colors cursor-pointer"
               >
-                <Truck className="w-4 h-4" />
-                <span>{language === 'bn' ? 'লাইভ ট্র্যাক করুন' : 'Track Consignment'}</span>
+                <Truck className="w-4 h-4 shrink-0" />
+                <span className="truncate">{language === 'bn' ? 'লাইভ ট্র্যাক করুন' : 'Track Order'}</span>
               </button>
 
               <button
                 onClick={onViewOrders}
-                className="flex-1 sm:flex-initial slate-bg border border-white/10 hover:border-white/20 text-white text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                className="min-h-[44px] slate-bg border border-white/10 hover:border-white/20 text-white text-xs font-semibold px-3 sm:px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 sm:gap-2 transition-colors cursor-pointer"
               >
-                <User className="w-4 h-4" />
-                <span>{language === 'bn' ? 'অর্ডারসমূহ' : 'My Orders'}</span>
+                <User className="w-4 h-4 shrink-0" />
+                <span className="truncate">{language === 'bn' ? 'অর্ডারসমূহ' : 'My Orders'}</span>
               </button>
 
               <button
                 onClick={onContinueShopping}
-                className="w-full sm:w-auto gold-bg text-black text-xs font-bold uppercase tracking-wider px-6 py-2.5 rounded-xl hover:brightness-110 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-[#D4AF37]/15"
+                className="col-span-2 sm:col-span-1 min-h-[46px] gold-bg text-black text-xs font-bold uppercase tracking-wider px-6 py-2.5 rounded-xl hover:brightness-110 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-[#D4AF37]/15"
               >
                 <ShoppingBag className="w-4 h-4" />
                 <span>{language === 'bn' ? 'শপিং করুন' : 'Continue'}</span>

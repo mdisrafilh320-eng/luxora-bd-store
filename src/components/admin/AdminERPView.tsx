@@ -51,16 +51,18 @@ import {
 import { sanitizeInput, validateBangladeshiPhone, validateMfsTransactionId } from '../../utils/security';
 import { PaymentSettingsTab } from './PaymentSettingsTab';
 import { AdminManagementTab } from './AdminManagementTab';
+import { StorefrontSettingsTab } from './StorefrontSettingsTab';
 import { ProductImageUploader } from './ProductImageUploader';
 import { PRIMARY_SUPER_ADMIN_EMAIL } from '../../services/adminRbacService';
 
-type AdminTab = 'overview' | 'orders' | 'inventory' | 'finance' | 'payment_settings' | 'team_rbac' | 'security';
+type AdminTab = 'overview' | 'orders' | 'inventory' | 'storefront_cms' | 'finance' | 'payment_settings' | 'team_rbac' | 'security';
 
 export const AdminERPView: React.FC = () => {
   const { 
     language, 
     t, 
-    products, 
+    products,
+    categories,
     refreshProducts,
     addProductToState,
     removeProductFromState,
@@ -114,6 +116,7 @@ export const AdminERPView: React.FC = () => {
     gallery: [],
     inStock: true,
     stockCount: 15,
+    freeDelivery: false,
     warranty: '2 Years Official Luxora Warranty',
     returnPolicy: '7 Days Hassle-Free Replacement',
     badge: 'new',
@@ -303,7 +306,8 @@ export const AdminERPView: React.FC = () => {
       descriptionBn: '',
       price: 15000,
       originalPrice: 18000,
-      category: 'audio',
+      category: categories?.[0]?.slug || 'gadgets',
+      freeDelivery: false,
       brand: 'Luxora Audio',
       image: '',
       gallery: [],
@@ -615,6 +619,19 @@ export const AdminERPView: React.FC = () => {
                 {metrics.lowStockItemsCount}
               </span>
             )}
+          </button>
+
+          <button
+            id="admin-tab-storefront-cms"
+            onClick={() => setActiveTab('storefront_cms')}
+            className={`min-h-[44px] px-5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer active:scale-95 ${
+              activeTab === 'storefront_cms'
+                ? 'bg-[#D4AF37] text-black font-semibold shadow-lg shadow-[#D4AF37]/20'
+                : 'bg-[#12141A] text-neutral-400 hover:text-neutral-200 hover:bg-[#1A1C24] border border-neutral-800/60'
+            }`}
+          >
+            <Sparkles className="w-4 h-4" />
+            {language === 'bn' ? 'ব্যানার, ক্যাটাগরি ও রিটার্ন নীতি' : 'Banners, Categories & Policy'}
           </button>
 
           <button
@@ -1156,12 +1173,11 @@ export const AdminERPView: React.FC = () => {
                   className="px-3.5 py-2.5 bg-[#161822] border border-neutral-800 rounded-xl text-xs text-neutral-300 focus:outline-none focus:border-[#D4AF37]"
                 >
                   <option value="all">All Categories</option>
-                  <option value="audio">Audio Flagship</option>
-                  <option value="wearables">Smart Wearables</option>
-                  <option value="desk-charging">Desk & Power</option>
-                  <option value="apple-ecosystem">Apple Ecosystem</option>
-                  <option value="photography">Photography</option>
-                  <option value="lifestyle">Luxury Lifestyle</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.slug}>
+                      {cat.nameEn}
+                    </option>
+                  ))}
                 </select>
 
                 <button
@@ -1494,7 +1510,12 @@ export const AdminERPView: React.FC = () => {
                       const el = document.getElementById('security-test-input') as HTMLInputElement;
                       const sanitized = sanitizeInput(el?.value || '');
                       const phoneVal = validateBangladeshiPhone(sanitized);
-                      alert(`Sanitized Result: "${sanitized}"\nBD Phone Valid: ${phoneVal.isValid} (Normalized: ${phoneVal.normalized})`);
+                      addToast({
+                        type: 'info',
+                        titleEn: 'Sanitizer Test Result',
+                        titleBn: 'স্যানিটাইজার টেস্ট ফলাফল',
+                        descriptionEn: `Sanitized: "${sanitized}" | Valid BD Phone: ${phoneVal.isValid}`,
+                      });
                     }}
                     className="px-4 py-2 bg-[#D4AF37] text-black font-semibold text-xs rounded-lg hover:bg-[#C5A028] transition-colors"
                   >
@@ -1511,7 +1532,12 @@ export const AdminERPView: React.FC = () => {
           <PaymentSettingsTab />
         )}
 
-        {/* ----------------- TAB 7: ENTERPRISE TEAM & ACCESS CONTROL (RBAC) ----------------- */}
+        {/* ----------------- TAB 7: STOREFRONT CMS (BANNERS, CATEGORIES, RETURN POLICY) ----------------- */}
+        {activeTab === 'storefront_cms' && (
+          <StorefrontSettingsTab />
+        )}
+
+        {/* ----------------- TAB 8: ENTERPRISE TEAM & ACCESS CONTROL (RBAC) ----------------- */}
         {activeTab === 'team_rbac' && (
           <AdminManagementTab />
         )}
@@ -1861,16 +1887,18 @@ export const AdminERPView: React.FC = () => {
                   <div>
                     <label className="text-neutral-400 block mb-1">Category *</label>
                     <select
-                      value={productFormData.category || 'audio'}
+                      value={productFormData.category || categories?.[0]?.slug || 'gadgets'}
                       onChange={(e) => setProductFormData({ ...productFormData, category: e.target.value as ProductCategory })}
                       className="w-full px-3 py-2 bg-[#161822] border border-neutral-800 rounded-xl text-white focus:outline-none focus:border-[#D4AF37]"
                     >
-                      <option value="audio">Audio Flagship</option>
-                      <option value="wearables">Smart Wearables</option>
-                      <option value="desk-charging">Desk & Power</option>
-                      <option value="apple-ecosystem">Apple Ecosystem</option>
-                      <option value="photography">Photography</option>
-                      <option value="lifestyle">Luxury Lifestyle</option>
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.slug}>
+                          {cat.nameEn} ({cat.nameBn})
+                        </option>
+                      ))}
+                      {!categories.some((c) => c.slug === (productFormData.category || '')) && productFormData.category && (
+                        <option value={productFormData.category}>{productFormData.category}</option>
+                      )}
                     </select>
                   </div>
 
@@ -1886,6 +1914,50 @@ export const AdminERPView: React.FC = () => {
                     />
                   </div>
                 </div>
+
+                {/* Detailed Product Description & Specifications (Multi-line Textarea) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-neutral-300 font-semibold block mb-1">
+                      Detailed Product Description & Specifications (English)
+                    </label>
+                    <textarea
+                      rows={5}
+                      value={productFormData.descriptionEn || ''}
+                      onChange={(e) => setProductFormData({ ...productFormData, descriptionEn: e.target.value })}
+                      placeholder="Write full product description, key features, materials, battery specs, box contents..."
+                      className="w-full px-3 py-2.5 bg-[#161822] border border-neutral-800 rounded-xl text-white focus:outline-none focus:border-[#D4AF37] leading-relaxed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-neutral-300 font-semibold block mb-1">
+                      প্রোডাক্টের বিস্তারিত বিবরণ (বাংলা - ঐচ্ছিক)
+                    </label>
+                    <textarea
+                      rows={5}
+                      value={productFormData.descriptionBn || ''}
+                      onChange={(e) => setProductFormData({ ...productFormData, descriptionBn: e.target.value })}
+                      placeholder="পণ্যের বিস্তারিত বিবরণ, ফিচার ও স্পেসিফিকেশন লিখুন..."
+                      className="w-full px-3 py-2.5 bg-[#161822] border border-neutral-800 rounded-xl text-white focus:outline-none focus:border-[#D4AF37] leading-relaxed"
+                    />
+                  </div>
+                </div>
+
+                {/* Free Delivery Flag */}
+                <label className="flex items-center gap-2.5 p-3 rounded-xl bg-[#161822] border border-neutral-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(productFormData.freeDelivery)}
+                    onChange={(e) => setProductFormData({ ...productFormData, freeDelivery: e.target.checked })}
+                    className="w-4 h-4 accent-[#D4AF37] rounded cursor-pointer"
+                  />
+                  <span className="text-neutral-200 font-medium">
+                    {language === 'bn'
+                      ? 'ফ্রি ডেলিভারি সুবিধা (হোম পেজের "Free Delivery" ফিল্টারে দেখাবে)'
+                      : 'Free Delivery Eligible (Show under "Free Delivery" filter on Home Page)'}
+                  </span>
+                </label>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>

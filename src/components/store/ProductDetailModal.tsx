@@ -43,7 +43,9 @@ export const ProductDetailModal: React.FC = () => {
     setActiveView,
     products,
     t,
-    addToast
+    addToast,
+    returnPolicy,
+    setIsReturnPolicyModalOpen
   } = useApp();
 
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -301,24 +303,24 @@ export const ProductDetailModal: React.FC = () => {
           className="fixed inset-0 bg-black/90 backdrop-blur-md transition-opacity"
         />
 
-        <div className="min-h-full flex items-center justify-center p-2.5 sm:p-6 text-center max-w-full">
+        <div className="min-h-full flex items-center justify-center p-2 sm:p-5 lg:p-6 text-center max-w-full">
           <motion.div
             initial={{ opacity: 0, scale: 0.97, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 16 }}
             transition={{ duration: 0.2 }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-5xl card-bg border border-[#22222C] rounded-3xl p-4 sm:p-8 lg:p-10 pb-24 sm:pb-10 text-left shadow-2xl relative overflow-hidden text-[#F3F4F6]"
+            className="w-full max-w-5xl card-bg border border-[#22222C] rounded-2xl sm:rounded-3xl p-4 sm:p-7 lg:p-10 pb-28 sm:pb-10 text-left shadow-2xl relative overflow-hidden text-[#F3F4F6]"
           >
             {/* Top gold accent line */}
             <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-[#D4AF37] via-[#E5C158] to-[#1E1E24]" />
 
             {/* Top Navigation Strip: Back to Catalog & Close */}
-            <div className="flex items-center justify-between gap-4 pb-4 mb-5 border-b border-[#1E1E24]">
+            <div className="flex items-center justify-between gap-3 pb-3 sm:pb-4 mb-4 sm:mb-5 border-b border-[#1E1E24]">
               <button
                 type="button"
                 onClick={handleCloseModal}
-                className="inline-flex items-center gap-2 text-xs font-semibold text-gray-300 hover:text-[#D4AF37] transition-colors py-1.5 px-3 rounded-lg hover:bg-white/5 cursor-pointer"
+                className="min-h-[44px] inline-flex items-center gap-2 text-xs font-semibold text-gray-300 hover:text-[#D4AF37] transition-colors py-2 px-3 -ml-2 rounded-xl hover:bg-white/5 cursor-pointer"
               >
                 <ArrowLeft className="w-4 h-4" />
                 <span>{language === 'bn' ? 'শপ ক্যাটালগে ফিরে যান' : 'Back to Shop Catalog'}</span>
@@ -327,7 +329,7 @@ export const ProductDetailModal: React.FC = () => {
               <button
                 type="button"
                 onClick={handleCloseModal}
-                className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
+                className="min-w-[44px] min-h-[44px] -mr-2 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
                 aria-label="Close product modal"
               >
                 <X className="w-5 h-5" />
@@ -335,10 +337,10 @@ export const ProductDetailModal: React.FC = () => {
             </div>
 
             {/* Main PDP Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 sm:gap-8 lg:gap-10">
               
               {/* Left Column: Interactive Image Gallery */}
-              <div className="lg:col-span-6 flex flex-col gap-4">
+              <div className="md:col-span-6 flex flex-col gap-3.5 sm:gap-4 min-w-0">
                 <div
                   onTouchStart={handleTouchStart}
                   onTouchMove={handleTouchMove}
@@ -361,22 +363,22 @@ export const ProductDetailModal: React.FC = () => {
                       <button
                         type="button"
                         onClick={handlePrevImage}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/70 hover:bg-black border border-white/15 text-white flex items-center justify-center opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity cursor-pointer z-10"
+                        className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-black/70 hover:bg-black border border-white/15 text-white flex items-center justify-center opacity-90 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity cursor-pointer z-10"
                         aria-label="Previous image"
                       >
-                        <ChevronLeft className="w-4 h-4" />
+                        <ChevronLeft className="w-5 h-5" />
                       </button>
                       <button
                         type="button"
                         onClick={handleNextImage}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/70 hover:bg-black border border-white/15 text-white flex items-center justify-center opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity cursor-pointer z-10"
+                        className="absolute right-2.5 sm:right-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-black/70 hover:bg-black border border-white/15 text-white flex items-center justify-center opacity-90 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity cursor-pointer z-10"
                         aria-label="Next image"
                       >
-                        <ChevronRight className="w-4 h-4" />
+                        <ChevronRight className="w-5 h-5" />
                       </button>
 
                       {/* Image Index Indicator */}
-                      <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-md bg-black/75 border border-white/10 text-[11px] font-mono text-gray-200 z-10">
+                      <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-md bg-black/75 border border-white/10 text-[11px] font-mono text-gray-200 tabular-nums z-10">
                         {selectedImageIndex + 1} / {galleryImages.length}
                       </div>
                     </>
@@ -424,27 +426,35 @@ export const ProductDetailModal: React.FC = () => {
                 )}
 
                 {/* Assurance Strip */}
-                <div className="grid grid-cols-3 gap-3 p-4 rounded-2xl slate-bg border border-white/5 text-[11px] text-gray-300">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3 p-3 sm:p-4 rounded-2xl slate-bg border border-white/5 text-[11px] text-gray-300">
                   <div className="flex flex-col items-center text-center gap-1">
-                    <ShieldCheck className="w-4 h-4 gold-text" />
+                    <ShieldCheck className="w-4 h-4 gold-text shrink-0" />
                     <span className="font-semibold text-white">100% Authentic</span>
                     <span className="text-[10px] text-gray-500">Official Warranty</span>
                   </div>
-                  <div className="flex flex-col items-center text-center gap-1 border-x border-white/5 px-2">
-                    <Truck className="w-4 h-4 gold-text" />
-                    <span className="font-semibold text-white">All 64 Districts</span>
-                    <span className="text-[10px] text-gray-500">Flat Delivery Rate</span>
+                  <div className="flex flex-col items-center text-center gap-1 border-x border-white/5 px-1.5 sm:px-2">
+                    <Truck className="w-4 h-4 gold-text shrink-0" />
+                    <span className="font-semibold text-white">64 Districts</span>
+                    <span className="text-[10px] text-gray-500">Flat Rate</span>
                   </div>
-                  <div className="flex flex-col items-center text-center gap-1">
-                    <RotateCcw className="w-4 h-4 gold-text" />
-                    <span className="font-semibold text-white">7-Day Return</span>
-                    <span className="text-[10px] text-gray-500">Easy Replacement</span>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsReturnPolicyModalOpen(true)}
+                    className="flex flex-col items-center justify-center text-center gap-1 cursor-pointer group hover:text-[#D4AF37] transition-colors min-h-[44px]"
+                  >
+                    <RotateCcw className="w-4 h-4 gold-text shrink-0" />
+                    <span className="font-semibold text-white group-hover:text-[#D4AF37] underline decoration-[#D4AF37]/40 underline-offset-4">
+                      {language === 'bn' ? '৭ দিন রিটার্ন' : '7-Day Return'}
+                    </span>
+                    <span className="text-[10px] text-gray-500">
+                      {language === 'bn' ? 'নীতিমালা দেখুন' : 'View Policy'}
+                    </span>
+                  </button>
                 </div>
               </div>
 
               {/* Right Column: Full Details, Pricing, Variants, and Direct Purchase Actions */}
-              <div className="lg:col-span-6 flex flex-col justify-between">
+              <div className="md:col-span-6 flex flex-col justify-between min-w-0">
                 <div>
                   {/* Metadata Line: Brand · Category · Live Stock Status */}
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5 text-xs">
@@ -546,11 +556,14 @@ export const ProductDetailModal: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Full Bilingual Descriptions */}
-                  <div className="py-4 space-y-2.5 text-xs sm:text-sm text-gray-300 leading-relaxed font-sans">
-                    <p>{primaryDescription}</p>
+                  {/* Full Bilingual Detailed Description & Specifications */}
+                  <div className="py-4 space-y-2.5 text-xs sm:text-sm text-gray-200 leading-relaxed font-sans">
+                    <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-[#D4AF37] block">
+                      {language === 'bn' ? 'প্রোডাক্টের বিস্তারিত বিবরণ ও স্পেসিফিকেশন' : 'Product Description & Specifications'}
+                    </span>
+                    <p className="whitespace-pre-line">{primaryDescription}</p>
                     {hasSecondaryDescription && (
-                      <p className="text-xs text-gray-400 pt-2 border-t border-white/5">
+                      <p className="text-xs text-gray-400 pt-2 border-t border-white/5 whitespace-pre-line">
                         {secondaryDescription}
                       </p>
                     )}
@@ -570,13 +583,13 @@ export const ProductDetailModal: React.FC = () => {
                               type="button"
                               key={c.name}
                               onClick={() => setSelectedColor(c.name)}
-                              className={`px-3.5 py-2 rounded-xl text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                              className={`min-h-[42px] px-3.5 py-2 rounded-xl text-xs flex items-center gap-2 transition-all cursor-pointer ${
                                 isColorSelected
                                   ? 'slate-bg gold-text border border-[#D4AF37] font-bold shadow-md shadow-[#D4AF37]/15'
                                   : 'bg-black/50 border border-white/10 text-gray-400 hover:text-white'
                               }`}
                             >
-                              <span className="w-3 h-3 rounded-full border border-white/20" style={{ backgroundColor: c.hex }} />
+                              <span className="w-3 h-3 rounded-full border border-white/20 shrink-0" style={{ backgroundColor: c.hex }} />
                               <span>{c.name}</span>
                             </button>
                           );
@@ -599,7 +612,7 @@ export const ProductDetailModal: React.FC = () => {
                               type="button"
                               key={variant}
                               onClick={() => setSelectedVariant(variant)}
-                              className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                              className={`min-h-[42px] px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                                 isVariantSelected
                                   ? 'gold-bg text-black font-bold shadow-md shadow-[#D4AF37]/20'
                                   : 'bg-black/50 border border-white/10 text-gray-300 hover:border-white/30'
@@ -615,11 +628,11 @@ export const ProductDetailModal: React.FC = () => {
 
                   {/* Detail Tabs: Specifications, Reviews, Warranty */}
                   <div className="mb-6">
-                    <div className="flex border-b border-[#1E1E24] text-xs font-semibold">
+                    <div className="flex border-b border-[#1E1E24] text-xs font-semibold overflow-x-auto no-scrollbar">
                       <button
                         type="button"
                         onClick={() => setActiveTab('specs')}
-                        className={`pb-2.5 px-3 transition-colors cursor-pointer ${
+                        className={`min-h-[44px] pb-2.5 px-3 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                           activeTab === 'specs'
                             ? 'gold-text border-b-2 gold-border font-bold'
                             : 'text-gray-500 hover:text-white'
@@ -630,7 +643,7 @@ export const ProductDetailModal: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setActiveTab('reviews')}
-                        className={`pb-2.5 px-3 transition-colors cursor-pointer ${
+                        className={`min-h-[44px] pb-2.5 px-3 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                           activeTab === 'reviews'
                             ? 'gold-text border-b-2 gold-border font-bold'
                             : 'text-gray-500 hover:text-white'
@@ -641,13 +654,13 @@ export const ProductDetailModal: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setActiveTab('warranty')}
-                        className={`pb-2.5 px-3 transition-colors cursor-pointer ${
+                        className={`min-h-[44px] pb-2.5 px-3 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                           activeTab === 'warranty'
                             ? 'gold-text border-b-2 gold-border font-bold'
                             : 'text-gray-500 hover:text-white'
                         }`}
                       >
-                        {language === 'bn' ? 'ওয়ারেন্টি ও ডেলিভারি' : 'Warranty & Delivery'}
+                        {language === 'bn' ? 'ওয়ারেন্টি ও রিটার্ন' : 'Warranty & Return'}
                       </button>
                     </div>
 
@@ -702,7 +715,7 @@ export const ProductDetailModal: React.FC = () => {
                               placeholder="Your Name (e.g. Tanzir Ahmed)"
                               value={newReviewAuthor}
                               onChange={(e) => setNewReviewAuthor(e.target.value)}
-                              className="w-full bg-[#0A0A0C] border border-[#1E1E24] rounded-xl px-3 py-2 text-xs text-white placeholder-gray-600 outline-none focus:border-[#D4AF37]"
+                              className="w-full min-h-[44px] bg-[#0A0A0C] border border-[#1E1E24] rounded-xl px-3.5 py-2.5 text-base sm:text-xs text-white placeholder-gray-600 outline-none focus:border-[#D4AF37]"
                             />
                             <textarea
                               required
@@ -710,12 +723,12 @@ export const ProductDetailModal: React.FC = () => {
                               placeholder="Write your honest review..."
                               value={newReviewComment}
                               onChange={(e) => setNewReviewComment(e.target.value)}
-                              className="w-full bg-[#0A0A0C] border border-[#1E1E24] rounded-xl px-3 py-2 text-xs text-white placeholder-gray-600 outline-none focus:border-[#D4AF37]"
+                              className="w-full bg-[#0A0A0C] border border-[#1E1E24] rounded-xl px-3.5 py-2.5 text-base sm:text-xs text-white placeholder-gray-600 outline-none focus:border-[#D4AF37]"
                             />
                             <button
                               type="submit"
                               disabled={isSubmittingReview}
-                              className="gold-bg text-black font-bold text-xs py-2 px-4 rounded-xl flex items-center gap-1.5 hover:brightness-110 transition-all cursor-pointer ml-auto disabled:opacity-50"
+                              className="min-h-[42px] gold-bg text-black font-bold text-xs py-2 px-4 rounded-xl flex items-center gap-1.5 hover:brightness-110 transition-all cursor-pointer ml-auto disabled:opacity-50"
                             >
                               <Send className="w-3.5 h-3.5" />
                               <span>{isSubmittingReview ? 'Submitting...' : 'Post Review'}</span>
@@ -749,15 +762,35 @@ export const ProductDetailModal: React.FC = () => {
                           <div className="flex items-start gap-2.5">
                             <ShieldCheck className="w-4 h-4 gold-text shrink-0 mt-0.5" />
                             <div>
-                              <span className="font-bold text-white block">Official Distributor Warranty</span>
+                              <span className="font-bold text-white block">
+                                {language === 'bn' ? 'অফিসিয়াল ওয়ারেন্টি' : 'Official Distributor Warranty'}
+                              </span>
                               <span>{warranty}</span>
                             </div>
                           </div>
-                          <div className="flex items-start gap-2.5 pt-2 border-t border-white/5">
+                          <div className="flex items-start gap-2.5 pt-3 border-t border-white/5">
                             <RotateCcw className="w-4 h-4 gold-text shrink-0 mt-0.5" />
-                            <div>
-                              <span className="font-bold text-white block">7-Day Replacement Policy</span>
-                              <span>If any manufacturing fault is discovered, we arrange doorstep pick-up and replacement nationwide.</span>
+                            <div className="space-y-2 flex-1">
+                              <span className="font-bold text-white block">
+                                {language === 'bn'
+                                  ? returnPolicy.titleBn || returnPolicy.titleEn
+                                  : returnPolicy.titleEn || returnPolicy.titleBn}
+                              </span>
+                              <p className="text-gray-300 leading-relaxed whitespace-pre-line">
+                                {language === 'bn'
+                                  ? returnPolicy.summaryBn || returnPolicy.summaryEn
+                                  : returnPolicy.summaryEn || returnPolicy.summaryBn}
+                              </p>
+                              <ol className="space-y-1.5 pt-1">
+                                {(language === 'bn' ? returnPolicy.stepsBn : returnPolicy.stepsEn).map((step, i) => (
+                                  <li key={i} className="flex items-start gap-2 text-[11px] text-gray-300">
+                                    <span className="w-4 h-4 rounded-full bg-[#D4AF37]/20 text-[#D4AF37] font-mono font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
+                                      {i + 1}
+                                    </span>
+                                    <span>{step}</span>
+                                  </li>
+                                ))}
+                              </ol>
                             </div>
                           </div>
                         </div>

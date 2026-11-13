@@ -113,36 +113,35 @@ export const CourierTrackingView: React.FC<CourierTrackingViewProps> = ({
   };
 
   return (
-    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#09090C] text-[#EDEDED] py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-5xl mx-auto space-y-8">
+    <div className="min-h-screen w-full max-w-full overflow-x-clip bg-[#09090C] text-[#EDEDED] pt-6 pb-28 md:py-12 px-3 sm:px-6 lg:px-8">
+      <div className="max-w-5xl mx-auto space-y-6 sm:space-y-8">
         
         {/* Navigation Breadcrumb / Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#1E1E28] pb-6">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#1E1E28] pb-5 sm:pb-6">
+          <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={onBackToStore || (() => setActiveView('store'))}
-              className="p-2 rounded-xl bg-[#14141C] border border-[#262634] text-gray-400 hover:text-white hover:border-[#D4AF37] transition-colors cursor-pointer"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-[#14141C] border border-[#262634] text-gray-400 hover:text-white hover:border-[#D4AF37] transition-colors cursor-pointer shrink-0"
               aria-label="Back to Store"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="inline-block w-2 h-2 rounded-full gold-bg animate-pulse" />
                 <span className="text-[11px] font-mono uppercase tracking-widest text-[#D4AF37]">
                   {language === 'bn' ? 'লাইভ কুরিয়ার ট্র্যাকিং' : 'LIVE CONSIGNMENT DISPATCH'}
                 </span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-bold font-luxury tracking-wide mt-0.5">
+              <h1 className="text-xl sm:text-3xl font-bold font-luxury tracking-wide mt-0.5 truncate">
                 {language === 'bn' ? 'অর্ডার ও ডেলিভারি ট্র্যাকিং' : 'Courier Delivery Tracking'}
               </h1>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => setActiveView('support')}
-              className="px-3.5 py-2 rounded-xl bg-[#14141C] border border-[#262634] text-xs font-semibold hover:border-[#D4AF37] text-gray-300 hover:text-white transition-colors flex items-center gap-2 cursor-pointer"
+              className="min-h-[44px] px-4 py-2 rounded-xl bg-[#14141C] border border-[#262634] text-xs font-semibold hover:border-[#D4AF37] text-gray-300 hover:text-white transition-colors flex items-center gap-2 cursor-pointer"
             >
               <HelpCircle className="w-4 h-4 text-[#D4AF37]" />
               <span>{language === 'bn' ? 'সহায়তা কেন্দ্র' : 'Help & FAQs'}</span>
@@ -150,8 +149,9 @@ export const CourierTrackingView: React.FC<CourierTrackingViewProps> = ({
             <button
               onClick={() => handleSearch(searchInput)}
               disabled={isSearching}
-              className="p-2 rounded-xl bg-[#14141C] border border-[#262634] text-gray-300 hover:text-white transition-colors cursor-pointer"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-[#14141C] border border-[#262634] text-gray-300 hover:text-white transition-colors cursor-pointer"
               title="Refresh Live Status"
+              aria-label="Refresh Live Status"
             >
               <RefreshCw className={`w-4 h-4 ${isSearching ? 'animate-spin text-[#D4AF37]' : ''}`} />
             </button>
@@ -159,10 +159,10 @@ export const CourierTrackingView: React.FC<CourierTrackingViewProps> = ({
         </div>
 
         {/* Search Bar Section */}
-        <div className="p-6 sm:p-8 rounded-3xl bg-[#121218] border border-[#22222E] shadow-2xl space-y-4">
+        <div className="p-4 sm:p-8 rounded-2xl sm:rounded-3xl bg-[#121218] border border-[#22222E] shadow-2xl space-y-4">
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
-              <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
+              <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
               <input
                 type="text"
                 value={searchInput}
@@ -171,14 +171,14 @@ export const CourierTrackingView: React.FC<CourierTrackingViewProps> = ({
                 placeholder={language === 'bn' 
                   ? 'আপনার Order ID (যেমন: LUX-892014) বা মোবাইল নম্বর লিখুন...' 
                   : 'Enter Order ID (e.g. LUX-892014) or Phone Number...'}
-                className="w-full pl-12 pr-4 py-3.5 bg-[#0C0C10] border border-[#2A2A38] rounded-2xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#D4AF37] transition-all font-mono"
+                className="w-full min-h-[48px] pl-12 pr-4 py-3 bg-[#0C0C10] border border-[#2A2A38] rounded-2xl text-base sm:text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#D4AF37] transition-all font-mono"
               />
             </div>
             <button
               type="button"
               onClick={() => handleSearch()}
               disabled={isSearching}
-              className="px-7 py-3.5 rounded-2xl gold-bg text-black text-xs font-black uppercase tracking-widest hover:brightness-110 transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-[#D4AF37]/20 disabled:opacity-50"
+              className="min-h-[48px] px-7 py-3.5 rounded-2xl gold-bg text-black text-xs font-black uppercase tracking-widest hover:brightness-110 transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-[#D4AF37]/20 disabled:opacity-50 shrink-0"
             >
               {isSearching ? (
                 <>

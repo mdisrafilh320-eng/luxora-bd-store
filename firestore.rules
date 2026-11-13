@@ -78,6 +78,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // --- BANNERS COLLECTION (Public Storefront Hero Carousel) ---
+    match /banners/{bannerId} {
+      allow read, write: if true;
+    }
+
     // --- ORDERS COLLECTION (Customers place orders, Staff & Admin Fulfill, Super Admin Deletes) ---
     match /orders/{orderId} {
       allow read: if isValidId(orderId);

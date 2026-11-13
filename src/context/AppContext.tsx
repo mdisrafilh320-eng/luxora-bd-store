@@ -8,7 +8,10 @@ import {
   ToastMessage,
   Order,
   PaymentSettings,
-  AdminRole 
+  AdminRole,
+  HeroBannerItem,
+  CategoryItem,
+  ReturnPolicyConfig
 } from '../types';
 import { adminRbacService, isSuperAdminEmail, PRIMARY_SUPER_ADMIN_EMAIL } from '../services/adminRbacService';
 import { translations } from '../translations';
@@ -31,6 +34,15 @@ import {
 } from '../services/authService';
 import { getProducts, subscribeToProducts, getLocalCachedProducts } from '../services/productService';
 import { paymentService, DEFAULT_PAYMENT_SETTINGS } from '../services/paymentService';
+import {
+  subscribeToBanners,
+  subscribeToCategories,
+  subscribeToReturnPolicy,
+  saveReturnPolicy as fbSaveReturnPolicy,
+  getCachedBanners,
+  getCachedCategories,
+  getCachedReturnPolicy,
+} from '../services/storefrontService';
 import { ConfirmationResult, RecaptchaVerifier } from 'firebase/auth';
 
 interface AppContextType {
@@ -118,6 +130,14 @@ interface AppContextType {
   isLoadingPaymentSettings: boolean;
   updatePaymentSettings: (newSettings: PaymentSettings) => Promise<void>;
   refreshPaymentSettings: () => Promise<void>;
+
+  // Dynamic Storefront CMS (Hero Banners, Categories, Return Policy)
+  banners: HeroBannerItem[];
+  categories: CategoryItem[];
+  returnPolicy: ReturnPolicyConfig;
+  updateReturnPolicy: (newPolicy: ReturnPolicyConfig) => Promise<void>;
+  isReturnPolicyModalOpen: boolean;
+  setIsReturnPolicyModalOpen: (open: boolean) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -682,6 +702,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Storefront CMS State (Banners, Dynamic Categories, Editable Return Policy)
+  const [banners, setBanners] = useState<HeroBannerItem[]>(() => getCachedBanners());
+  const [categories, setCategories] = useState<CategoryItem[]>(() => getCachedCategories());
+  const [returnPolicy, setReturnPolicy] = useState<ReturnPolicyConfig>(() => getCachedReturnPolicy());
+  const [isReturnPolicyModalOpen, setIsReturnPolicyModalOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const unsubBanners = subscribeToBanners((liveBanners) => {
+      setBanners(liveBanners);
+    });
+    const unsubCategories = subscribeToCategories((liveCategories) => {
+      setCategories(liveCategories);
+    });
+    const unsubPolicy = subscribeToReturnPolicy((livePolicy) => {
+      setReturnPolicy(livePolicy);
+    });
+
+    return () => {
+      unsubBanners();
+      unsubCategories();
+      unsubPolicy();
+    };
+  }, []);
+
+  const updateReturnPolicy = async (newPolicy: ReturnPolicyConfig) => {
+    try {
+      const saved = await fbSaveReturnPolicy(newPolicy, user?.email || 'Admin');
+      setReturnPolicy(saved);
+      addToast({
+        type: 'success',
+        titleEn: 'Return Policy Updated',
+        titleBn: 'রিটার্ন নীতিমালা সংরক্ষিত হয়েছে',
+        descriptionEn: 'Updated 7-day return policy & instructions are now live storewide.',
+        descriptionBn: 'নতুন রিটার্ন নীতিমালা স্টোরজুড়ে প্রকাশিত হয়েছে।',
+      });
+    } catch (err: any) {
+      addToast({
+        type: 'error',
+        titleEn: 'Failed to Update Policy',
+        titleBn: 'নীতিমালা সংরক্ষণে ব্যর্থ',
+        descriptionEn: err?.message || 'Could not update return policy in Firestore.',
+      });
+      throw err;
+    }
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -750,6 +816,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isLoadingPaymentSettings,
         updatePaymentSettings,
         refreshPaymentSettings,
+        banners,
+        categories,
+        returnPolicy,
+        updateReturnPolicy,
+        isReturnPolicyModalOpen,
+        setIsReturnPolicyModalOpen,
       }}
     >
       {children}

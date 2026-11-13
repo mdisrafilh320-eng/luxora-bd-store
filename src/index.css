@@ -7,11 +7,29 @@
     --font-bn: 'Hind Siliguri', 'Plus Jakarta Sans', sans-serif;
   }
 
+  html {
+    scroll-behavior: smooth;
+    overflow-x: clip;
+  }
+
   body {
     font-family: var(--font-sans);
     background-color: #0A0A0C;
     color: #F3F4F6;
-    overflow-x: hidden;
+    overflow-x: clip;
+    -webkit-tap-highlight-color: transparent;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Eliminate 300ms tap delay and double-tap zoom quirks across mobile/tablet controls */
+  button,
+  a,
+  select,
+  input,
+  textarea,
+  [role="button"],
+  [role="tab"] {
+    touch-action: manipulation;
   }
 
   /* Custom subtle gold scrollbar */
@@ -29,6 +47,18 @@
   ::-webkit-scrollbar-thumb:hover {
     background: #D4AF37;
   }
+}
+
+/* Scrollbar-free horizontal scrollers (category strips, gallery thumbnails, chips) */
+.no-scrollbar,
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
 .gold-text {
@@ -79,5 +109,3 @@
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.07);
 }
-
-

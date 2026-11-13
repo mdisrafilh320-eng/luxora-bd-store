@@ -89,26 +89,26 @@ export const CustomerSupportHub: React.FC = () => {
     : faqs.filter(f => f.category === activeCategory);
 
   return (
-    <div className="min-h-screen bg-[#09090C] text-[#EDEDED] py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-5xl mx-auto space-y-10">
+    <div className="min-h-screen bg-[#09090C] text-[#EDEDED] pt-6 pb-28 md:py-12 px-3 sm:px-6 lg:px-8">
+      <div className="max-w-5xl mx-auto space-y-8 sm:space-y-10">
         
         {/* Header Navigation */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#1E1E28] pb-6">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#1E1E28] pb-5 sm:pb-6">
+          <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setActiveView('store')}
-              className="p-2 rounded-xl bg-[#14141C] border border-[#262634] text-gray-400 hover:text-white hover:border-[#D4AF37] transition-colors cursor-pointer"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-[#14141C] border border-[#262634] text-gray-400 hover:text-white hover:border-[#D4AF37] transition-colors cursor-pointer shrink-0"
+              aria-label="Back to store"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="inline-block w-2 h-2 rounded-full gold-bg animate-pulse" />
                 <span className="text-[11px] font-mono uppercase tracking-widest text-[#D4AF37]">
                   {language === 'bn' ? '২৪/৭ কাস্টমার সার্ভিস' : 'CONCIERGE & CLIENT CARE'}
                 </span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-bold font-luxury tracking-wide mt-0.5">
+              <h1 className="text-xl sm:text-3xl font-bold font-luxury tracking-wide mt-0.5 truncate">
                 {language === 'bn' ? 'সহায়তা কেন্দ্র ও প্রশ্নোত্তর' : 'Client Support & FAQ Hub'}
               </h1>
             </div>
@@ -116,7 +116,7 @@ export const CustomerSupportHub: React.FC = () => {
 
           <button
             onClick={() => setActiveView('track')}
-            className="px-4 py-2.5 rounded-xl gold-bg text-black text-xs font-bold uppercase tracking-wider hover:brightness-110 transition-all flex items-center gap-2 cursor-pointer shadow-md shadow-[#D4AF37]/20"
+            className="min-h-[44px] px-4 py-2.5 rounded-xl gold-bg text-black text-xs font-bold uppercase tracking-wider hover:brightness-110 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#D4AF37]/20 shrink-0"
           >
             <Truck className="w-4 h-4" />
             <span>{language === 'bn' ? 'অর্ডার ট্র্যাক করুন' : 'Track Consignment'}</span>
@@ -222,7 +222,7 @@ export const CustomerSupportHub: React.FC = () => {
             </div>
 
             {/* Category Filter Tabs */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
               {[
                 { id: 'all', labelEn: 'All', labelBn: 'সকল' },
                 { id: 'delivery', labelEn: 'Shipping', labelBn: 'ডেলিভারি' },
@@ -233,7 +233,7 @@ export const CustomerSupportHub: React.FC = () => {
                 <button
                   key={tab.id}
                   onClick={() => setActiveCategory(tab.id as any)}
-                  className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap text-xs font-medium ${
+                  className={`min-h-[40px] px-3.5 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap text-xs font-medium shrink-0 ${
                     activeCategory === tab.id
                       ? 'gold-bg text-black font-bold shadow-md shadow-[#D4AF37]/15'
                       : 'bg-[#14141C] text-gray-400 hover:text-white border border-[#222230]'

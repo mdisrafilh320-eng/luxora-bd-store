@@ -435,25 +435,26 @@ export const CheckoutPage: React.FC = () => {
   }
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 text-[#EDEDED]">
+    <div className="w-full max-w-[1400px] mx-auto px-3 sm:px-6 lg:px-8 pt-6 pb-28 md:py-10 text-[#EDEDED]">
       {/* Back button */}
       <button
+        type="button"
         onClick={() => setActiveView('store')}
-        className="text-xs text-gray-400 hover:text-white flex items-center gap-2 mb-6 transition-colors cursor-pointer"
+        className="min-h-[44px] text-xs text-gray-400 hover:text-white inline-flex items-center gap-2 mb-4 sm:mb-6 transition-colors cursor-pointer px-2 -ml-2 rounded-lg hover:bg-white/5"
       >
         <ArrowLeft className="w-4 h-4" />
         <span>{language === 'bn' ? 'কেনাকাটায় ফিরে যান' : 'Back to Boutique'}</span>
       </button>
 
       {/* Header Banner */}
-      <div className="card-bg border border-[#22222E] rounded-2xl sm:rounded-3xl p-6 mb-8 relative overflow-hidden shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="card-bg border border-[#22222E] rounded-2xl sm:rounded-3xl p-4 sm:p-6 mb-6 sm:mb-8 relative overflow-hidden shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="absolute top-0 inset-x-0 h-1 gold-bg" />
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-2 text-xs uppercase font-mono gold-text font-bold mb-1">
-            <Lock className="w-3.5 h-3.5" />
+            <Lock className="w-3.5 h-3.5 shrink-0" />
             <span>Fast & Secure Checkout</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold font-luxury tracking-wide text-white">
+          <h1 className="text-xl sm:text-3xl font-bold font-luxury tracking-wide text-white">
             {language === 'bn' ? 'অর্ডার কনফার্মেশন ফর্ম' : 'Order Confirmation & Checkout'}
           </h1>
           <p className="text-xs sm:text-sm text-gray-400 mt-1">
@@ -463,26 +464,26 @@ export const CheckoutPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="px-3.5 py-1.5 rounded-xl bg-[#D4AF37]/15 border border-[#D4AF37]/30 text-xs font-mono font-bold text-[#D4AF37] flex items-center gap-2">
-            <Truck className="w-4 h-4" />
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="px-3.5 py-2 rounded-xl bg-[#D4AF37]/15 border border-[#D4AF37]/30 text-xs font-mono font-bold text-[#D4AF37] flex items-center gap-2 tabular-nums">
+            <Truck className="w-4 h-4 shrink-0" />
             <span>{language === 'bn' ? `ডেলিভারি চার্জ: ৳${flatDeliveryCharge}` : `Flat Delivery: ৳${flatDeliveryCharge}`}</span>
           </div>
         </div>
       </div>
 
-      <form onSubmit={handlePlaceOrder} className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <form onSubmit={handlePlaceOrder} className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
         
         {/* Left Column: Essential Details + Advance Payment (8 Cols) */}
         <div className="lg:col-span-8 space-y-6">
 
           {/* SECTION 1: ESSENTIAL CUSTOMER DETAILS (STREAMLINED) */}
-          <div className="card-bg border border-[#22222E] rounded-2xl p-6 sm:p-7 space-y-5 shadow-xl">
+          <div className="card-bg border border-[#22222E] rounded-2xl p-4 sm:p-6 lg:p-7 space-y-5 shadow-xl">
             <div className="flex items-center gap-3 pb-3 border-b border-[#20202A]">
-              <div className="w-7 h-7 rounded-full gold-bg text-black flex items-center justify-center font-bold text-xs">
+              <div className="w-7 h-7 rounded-full gold-bg text-black flex items-center justify-center font-bold text-xs shrink-0">
                 1
               </div>
-              <div>
+              <div className="min-w-0">
                 <h3 className="text-base font-bold text-white">
                   {language === 'bn' ? 'গ্রাহকের তথ্য ও ডেলিভারি ঠিকানা' : 'Customer & Delivery Address'}
                 </h3>
@@ -499,20 +500,20 @@ export const CheckoutPage: React.FC = () => {
                   {language === 'bn' ? 'আপনার নাম *' : 'Customer Full Name *'}
                 </label>
                 <div className="relative">
-                  <User className="w-4 h-4 absolute left-3.5 top-3.5 text-gray-500" />
+                  <User className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
                   <input
                     type="text"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     placeholder="e.g. Tanvir Ahmed"
-                    className={`w-full bg-[#121218] border ${
+                    className={`w-full min-h-[46px] bg-[#121218] border ${
                       formErrors.fullName ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-[#2A2A36]'
-                    } rounded-xl pl-10 pr-4 py-3 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] transition-colors`}
+                    } rounded-xl pl-10 pr-4 py-3 text-base sm:text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] transition-colors`}
                   />
                 </div>
                 {formErrors.fullName && (
                   <span className="text-[11px] text-red-400 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" /> {formErrors.fullName}
+                    <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.fullName}
                   </span>
                 )}
               </div>
@@ -523,27 +524,27 @@ export const CheckoutPage: React.FC = () => {
                   {language === 'bn' ? 'মোবাইল নম্বর (১১ ডিজিট) *' : 'Phone Number (11 Digits) *'}
                 </label>
                 <div className="relative">
-                  <Phone className="w-4 h-4 absolute left-3.5 top-3.5 text-gray-500" />
+                  <Phone className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
                   <input
                     type="tel"
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
                     placeholder="017XXXXXXXX"
-                    className={`w-full bg-[#121218] border ${
+                    className={`w-full min-h-[46px] bg-[#121218] border ${
                       formErrors.phoneNumber ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-[#2A2A36]'
-                    } rounded-xl pl-10 pr-4 py-3 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] font-mono transition-colors`}
+                    } rounded-xl pl-10 pr-4 py-3 text-base sm:text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] font-mono transition-colors`}
                   />
                 </div>
                 {formErrors.phoneNumber && (
                   <span className="text-[11px] text-red-400 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" /> {formErrors.phoneNumber}
+                    <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.phoneNumber}
                   </span>
                 )}
               </div>
             </div>
 
             {/* Structured Bangladesh Location Fields: Division, District, Upazila */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Division (বিভাগ) */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold text-gray-300">
@@ -564,9 +565,9 @@ export const CheckoutPage: React.FC = () => {
                         upazila: '',
                       }));
                     }}
-                    className={`w-full appearance-none bg-[#121218] border ${
+                    className={`w-full min-h-[46px] appearance-none bg-[#121218] border ${
                       formErrors.division ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-[#2A2A36]'
-                    } rounded-xl pl-3.5 pr-9 py-3 text-xs text-white focus:outline-none focus:border-[#D4AF37] transition-colors cursor-pointer`}
+                    } rounded-xl pl-3.5 pr-9 py-3 text-base sm:text-xs text-white focus:outline-none focus:border-[#D4AF37] transition-colors cursor-pointer`}
                   >
                     <option value="" className="bg-[#121218] text-gray-400">
                       {language === 'bn' ? 'বিভাগ বেছে নিন' : 'Select Division'}
@@ -577,11 +578,11 @@ export const CheckoutPage: React.FC = () => {
                       </option>
                     ))}
                   </select>
-                  <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-3.5 pointer-events-none" />
+                  <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
                 {formErrors.division && (
                   <span className="text-[11px] text-red-400 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" /> {formErrors.division}
+                    <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.division}
                   </span>
                 )}
               </div>
@@ -600,9 +601,9 @@ export const CheckoutPage: React.FC = () => {
                       setUpazila('');
                       setFormErrors((prev) => ({ ...prev, district: '', upazila: '' }));
                     }}
-                    className={`w-full appearance-none bg-[#121218] border ${
+                    className={`w-full min-h-[46px] appearance-none bg-[#121218] border ${
                       formErrors.district ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-[#2A2A36]'
-                    } rounded-xl pl-3.5 pr-9 py-3 text-xs text-white focus:outline-none focus:border-[#D4AF37] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
+                    } rounded-xl pl-3.5 pr-9 py-3 text-base sm:text-xs text-white focus:outline-none focus:border-[#D4AF37] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     <option value="" className="bg-[#121218] text-gray-400">
                       {!selectedDivision
@@ -615,11 +616,11 @@ export const CheckoutPage: React.FC = () => {
                       </option>
                     ))}
                   </select>
-                  <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-3.5 pointer-events-none" />
+                  <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
                 {formErrors.district && (
                   <span className="text-[11px] text-red-400 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" /> {formErrors.district}
+                    <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.district}
                   </span>
                 )}
               </div>
@@ -630,7 +631,7 @@ export const CheckoutPage: React.FC = () => {
                   {language === 'bn' ? 'থানা / উপজেলা (Upazila) *' : 'Upazila / Thana (থানা) *'}
                 </label>
                 <div className="relative">
-                  <Navigation className="w-3.5 h-3.5 absolute left-3.5 top-3.5 text-gray-500" />
+                  <Navigation className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
                   <input
                     type="text"
                     list="bd-upazila-options"
@@ -642,9 +643,9 @@ export const CheckoutPage: React.FC = () => {
                       }
                     }}
                     placeholder={language === 'bn' ? 'থানা বা উপজেলার নাম লিখুন' : 'e.g. Banani, Savar, Sadar'}
-                    className={`w-full bg-[#121218] border ${
+                    className={`w-full min-h-[46px] bg-[#121218] border ${
                       formErrors.upazila ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-[#2A2A36]'
-                    } rounded-xl pl-9 pr-3.5 py-3 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] transition-colors`}
+                    } rounded-xl pl-9 pr-3.5 py-3 text-base sm:text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] transition-colors`}
                   />
                   <datalist id="bd-upazila-options">
                     {suggestedUpazilas.map((u) => (
@@ -654,7 +655,7 @@ export const CheckoutPage: React.FC = () => {
                 </div>
                 {formErrors.upazila && (
                   <span className="text-[11px] text-red-400 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" /> {formErrors.upazila}
+                    <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.upazila}
                   </span>
                 )}
               </div>
@@ -666,7 +667,7 @@ export const CheckoutPage: React.FC = () => {
                 {language === 'bn' ? 'বিস্তারিত ডেলিভারি ঠিকানা (বাড়ি, রোড, গ্রাম/এলাকা) *' : 'Detailed Delivery Address (House, Road, Area/Village) *'}
               </label>
               <div className="relative">
-                <MapPin className="w-4 h-4 absolute left-3.5 top-3.5 text-gray-500" />
+                <MapPin className="w-4 h-4 absolute left-3.5 top-3.5 text-gray-500 pointer-events-none" />
                 <textarea
                   rows={2}
                   value={fullAddress}
@@ -679,53 +680,53 @@ export const CheckoutPage: React.FC = () => {
                   placeholder={language === 'bn' ? 'বাড়ি/ফ্ল্যাট নং, রোড নং, গ্রাম বা এলাকার বিস্তারিত ঠিকানা লিখুন' : 'House #, Flat #, Road #, Block, Area or Village'}
                   className={`w-full bg-[#121218] border ${
                     formErrors.fullAddress ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-[#2A2A36]'
-                  } rounded-xl pl-10 pr-4 py-3 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] transition-colors`}
+                  } rounded-xl pl-10 pr-4 py-3 text-base sm:text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] transition-colors`}
                 />
               </div>
               {formErrors.fullAddress && (
                 <span className="text-[11px] text-red-400 flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" /> {formErrors.fullAddress}
+                  <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.fullAddress}
                 </span>
               )}
             </div>
           </div>
 
           {/* SECTION 2: ORDER ITEMS & QUANTITY CONTROLS */}
-          <div className="card-bg border border-[#22222E] rounded-2xl p-6 sm:p-7 space-y-4 shadow-xl">
+          <div className="card-bg border border-[#22222E] rounded-2xl p-4 sm:p-6 lg:p-7 space-y-4 shadow-xl">
             <div className="flex items-center justify-between pb-3 border-b border-[#20202A]">
-              <div className="flex items-center gap-3">
-                <div className="w-7 h-7 rounded-full gold-bg text-black flex items-center justify-center font-bold text-xs">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-7 h-7 rounded-full gold-bg text-black flex items-center justify-center font-bold text-xs shrink-0">
                   2
                 </div>
-                <h3 className="text-base font-bold text-white">
+                <h3 className="text-base font-bold text-white truncate">
                   {language === 'bn' ? 'অর্ডারের পণ্য ও পরিমাণ' : 'Products & Quantity'}
                 </h3>
               </div>
-              <span className="text-xs text-gray-400 font-mono">
+              <span className="text-xs text-gray-400 font-mono tabular-nums shrink-0">
                 {cart.length} {cart.length === 1 ? 'item' : 'items'}
               </span>
             </div>
 
             <div className="divide-y divide-white/5 space-y-3">
               {cart.map((item) => (
-                <div key={item.product.id + (item.selectedColor || '')} className="pt-3 first:pt-0 flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 min-w-0">
+                <div key={item.product.id + (item.selectedColor || '')} className="pt-3 first:pt-0 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
                     <img
                       src={item.product.image}
                       alt={item.product.nameEn}
                       referrerPolicy="no-referrer"
                       className="w-12 h-12 object-cover rounded-xl bg-black border border-white/10 shrink-0"
                     />
-                    <div className="min-w-0 truncate">
+                    <div className="min-w-0 flex-1">
                       <h4 className="text-xs sm:text-sm font-semibold text-white truncate">
                         {language === 'bn' ? item.product.nameBn : item.product.nameEn}
                       </h4>
                       <div className="flex items-center gap-2 text-[11px] text-gray-400 mt-0.5">
-                        <span className="gold-text font-mono font-bold">
+                        <span className="gold-text font-mono font-bold tabular-nums">
                           {formatBDT(item.product.price, language)}
                         </span>
                         {item.selectedColor && (
-                          <span className="px-1.5 py-0.5 rounded bg-white/5 text-[10px] text-gray-300">
+                          <span className="px-1.5 py-0.5 rounded bg-white/5 text-[10px] text-gray-300 truncate">
                             {item.selectedColor}
                           </span>
                         )}
@@ -734,23 +735,25 @@ export const CheckoutPage: React.FC = () => {
                   </div>
 
                   {/* Quantity Stepper */}
-                  <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 ml-auto">
                     <div className="flex items-center bg-[#161620] border border-[#2A2A36] rounded-xl overflow-hidden">
                       <button
                         type="button"
                         onClick={() => updateQuantity(item.product.id, Math.max(1, item.quantity - 1))}
                         disabled={item.quantity <= 1}
-                        className="p-1.5 text-gray-400 hover:text-white disabled:opacity-30 transition-colors"
+                        className="min-w-[38px] min-h-[38px] flex items-center justify-center text-gray-400 hover:text-white disabled:opacity-30 transition-colors cursor-pointer"
+                        aria-label="Decrease quantity"
                       >
                         <Minus className="w-3.5 h-3.5" />
                       </button>
-                      <span className="px-3 text-xs font-mono font-bold text-white">
+                      <span className="px-2.5 text-xs font-mono font-bold text-white tabular-nums">
                         {item.quantity}
                       </span>
                       <button
                         type="button"
                         onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
-                        className="p-1.5 text-gray-400 hover:text-white transition-colors"
+                        className="min-w-[38px] min-h-[38px] flex items-center justify-center text-gray-400 hover:text-white transition-colors cursor-pointer"
+                        aria-label="Increase quantity"
                       >
                         <Plus className="w-3.5 h-3.5" />
                       </button>
@@ -759,8 +762,9 @@ export const CheckoutPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => removeFromCart(item.product.id)}
-                      className="p-1.5 text-gray-500 hover:text-red-400 transition-colors"
+                      className="min-w-[38px] min-h-[38px] flex items-center justify-center rounded-xl text-gray-500 hover:text-red-400 hover:bg-white/5 transition-colors cursor-pointer"
                       title="Remove item"
+                      aria-label="Remove item"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -771,7 +775,7 @@ export const CheckoutPage: React.FC = () => {
           </div>
 
           {/* SECTION 3: ADVANCE PAYMENT & VERIFICATION (NO 0% ADVANCE COD) */}
-          <div className="card-bg border border-[#22222E] rounded-2xl p-6 sm:p-7 space-y-6 shadow-xl">
+          <div className="card-bg border border-[#22222E] rounded-2xl p-4 sm:p-6 lg:p-7 space-y-5 sm:space-y-6 shadow-xl">
             <div className="flex items-center gap-3 pb-3 border-b border-[#20202A]">
               <div className="w-7 h-7 rounded-full gold-bg text-black flex items-center justify-center font-bold text-xs">
                 3
@@ -974,13 +978,13 @@ export const CheckoutPage: React.FC = () => {
                     value={senderNumber}
                     onChange={(e) => setSenderNumber(e.target.value)}
                     placeholder="017XXXXXXXX"
-                    className={`w-full bg-[#161620] border ${
+                    className={`w-full min-h-[46px] bg-[#161620] border ${
                       formErrors.senderNumber ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-[#2A2A36]'
-                    } rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] font-mono`}
+                    } rounded-xl px-4 py-2.5 text-base sm:text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] font-mono`}
                   />
                   {formErrors.senderNumber && (
                     <span className="text-[11px] text-red-400 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" /> {formErrors.senderNumber}
+                      <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.senderNumber}
                     </span>
                   )}
                 </div>
@@ -995,13 +999,13 @@ export const CheckoutPage: React.FC = () => {
                     value={transactionId}
                     onChange={(e) => setTransactionId(e.target.value.toUpperCase())}
                     placeholder={currentMfs.trxIdFormatHint}
-                    className={`w-full bg-[#161620] border ${
+                    className={`w-full min-h-[46px] bg-[#161620] border ${
                       formErrors.transactionId ? 'border-red-500/80 ring-1 ring-red-500/50' : 'border-[#2A2A36]'
-                    } rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] font-mono tracking-wider uppercase`}
+                    } rounded-xl px-4 py-2.5 text-base sm:text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] font-mono tracking-wider uppercase`}
                   />
                   {formErrors.transactionId && (
                     <span className="text-[11px] text-red-400 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" /> {formErrors.transactionId}
+                      <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.transactionId}
                     </span>
                   )}
                 </div>
@@ -1014,16 +1018,21 @@ export const CheckoutPage: React.FC = () => {
                 </label>
                 {screenshotPreview ? (
                   <div className="p-2.5 rounded-xl bg-[#161620] border border-white/10 flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <img src={screenshotPreview} alt="Receipt preview" className="w-10 h-10 object-cover rounded-lg" />
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <img src={screenshotPreview} alt="Receipt preview" className="w-10 h-10 object-cover rounded-lg shrink-0" />
                       <span className="text-xs text-white truncate max-w-[200px]">{screenshotFile?.name}</span>
                     </div>
-                    <button type="button" onClick={handleRemoveScreenshot} className="p-1 text-gray-400 hover:text-red-400">
+                    <button
+                      type="button"
+                      onClick={handleRemoveScreenshot}
+                      className="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg text-gray-400 hover:text-red-400 cursor-pointer"
+                      aria-label="Remove screenshot"
+                    >
                       <X className="w-4 h-4" />
                     </button>
                   </div>
                 ) : (
-                  <label className="border border-dashed border-[#2A2A36] hover:border-[#D4AF37]/50 rounded-xl p-3 flex items-center justify-center gap-2 cursor-pointer transition-colors bg-[#14141C]">
+                  <label className="min-h-[46px] border border-dashed border-[#2A2A36] hover:border-[#D4AF37]/50 rounded-xl p-3 flex items-center justify-center gap-2 cursor-pointer transition-colors bg-[#14141C]">
                     <Upload className="w-4 h-4 text-gray-400" />
                     <span className="text-xs text-gray-400">
                       {language === 'bn' ? 'রসিদের ছবি যুক্ত করুন (ঐচ্ছিক)' : 'Attach Receipt Screenshot (Optional)'}
@@ -1038,10 +1047,10 @@ export const CheckoutPage: React.FC = () => {
 
         {/* Right Column: Order Summary & Placement (4 Cols) */}
         <div className="lg:col-span-4 space-y-6">
-          <div className="card-bg border border-[#22222E] rounded-2xl p-6 space-y-5 shadow-2xl sticky top-24">
+          <div className="card-bg border border-[#22222E] rounded-2xl p-4 sm:p-6 space-y-5 shadow-2xl lg:sticky lg:top-24">
             <h3 className="text-base font-bold text-white pb-3 border-b border-[#20202A] flex items-center justify-between">
               <span>{language === 'bn' ? 'অর্ডার ইনভয়েস' : 'Order Invoice'}</span>
-              <span className="text-xs font-mono font-normal text-emerald-400">
+              <span className="text-xs font-mono font-normal text-emerald-400 tabular-nums">
                 Nationwide ৳{flatDeliveryCharge}
               </span>
             </h3>
@@ -1051,12 +1060,17 @@ export const CheckoutPage: React.FC = () => {
               {appliedPromo ? (
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-800/40 text-xs">
                   <div className="flex items-center gap-2 text-emerald-300">
-                    <Tag className="w-3.5 h-3.5 text-emerald-400" />
+                    <Tag className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                     <span className="font-bold font-mono">{appliedPromo}</span>
-                    <span className="text-emerald-400 font-mono">(-{formatBDT(promoDiscount, language)})</span>
+                    <span className="text-emerald-400 font-mono tabular-nums">(-{formatBDT(promoDiscount, language)})</span>
                   </div>
-                  <button type="button" onClick={handleRemovePromo} className="text-gray-400 hover:text-red-400 p-1">
-                    <X className="w-3.5 h-3.5" />
+                  <button
+                    type="button"
+                    onClick={handleRemovePromo}
+                    className="min-w-[36px] min-h-[36px] flex items-center justify-center text-gray-400 hover:text-red-400 cursor-pointer"
+                    aria-label="Remove promo code"
+                  >
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
               ) : (
@@ -1066,12 +1080,12 @@ export const CheckoutPage: React.FC = () => {
                     value={promoCodeInput}
                     onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
                     placeholder="Voucher: LUXORA10"
-                    className="flex-1 bg-[#121218] border border-[#2A2A36] rounded-xl px-3 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] font-mono uppercase"
+                    className="flex-1 min-h-[44px] bg-[#121218] border border-[#2A2A36] rounded-xl px-3.5 py-2 text-base sm:text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] font-mono uppercase"
                   />
                   <button
                     type="button"
                     onClick={handleApplyPromo}
-                    className="slate-bg border border-white/10 hover:border-white/30 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors cursor-pointer"
+                    className="min-h-[44px] slate-bg border border-white/10 hover:border-white/30 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors cursor-pointer shrink-0"
                   >
                     {language === 'bn' ? 'প্রয়োগ' : 'Apply'}
                   </button>

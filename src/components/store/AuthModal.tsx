@@ -234,7 +234,7 @@ export const AuthModal: React.FC = () => {
             {/* Close Button */}
             <button
               onClick={() => setIsAuthModalOpen(false)}
-              className="absolute top-5 right-5 p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-full transition-colors cursor-pointer"
+              className="absolute top-3.5 right-3.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
               aria-label="Close"
             >
               <X className="w-5 h-5" />
@@ -339,7 +339,7 @@ export const AuthModal: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => { setActiveTab('email'); setErrorMessage(null); }}
-                      className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      className={`flex-1 min-h-[40px] flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                         activeTab === 'email'
                           ? 'slate-bg gold-text border border-white/10 shadow-sm'
                           : 'text-gray-400 hover:text-white'
@@ -351,7 +351,7 @@ export const AuthModal: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => { setActiveTab('phone'); setErrorMessage(null); }}
-                      className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      className={`flex-1 min-h-[40px] flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                         activeTab === 'phone'
                           ? 'slate-bg gold-text border border-white/10 shadow-sm'
                           : 'text-gray-400 hover:text-white'
@@ -363,7 +363,7 @@ export const AuthModal: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => { setActiveTab('social'); setErrorMessage(null); }}
-                      className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      className={`flex-1 min-h-[40px] flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                         activeTab === 'social'
                           ? 'slate-bg gold-text border border-white/10 shadow-sm'
                           : 'text-gray-400 hover:text-white'
@@ -425,7 +425,7 @@ export const AuthModal: React.FC = () => {
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             placeholder={language === 'bn' ? 'উদা: তানজির আহমেদ' : 'e.g. Tanzir Ahmed'}
-                            className="w-full bg-[#0A0A0C] border border-[#1E1E24] focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder:text-gray-600 outline-none transition-colors"
+                            className="w-full min-h-[44px] bg-[#0A0A0C] border border-[#1E1E24] focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-base sm:text-xs text-white placeholder:text-gray-600 outline-none transition-colors"
                           />
                         </div>
                       </div>
@@ -441,7 +441,7 @@ export const AuthModal: React.FC = () => {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="you@luxoragroup.com"
-                        className="w-full bg-[#0A0A0C] border border-[#1E1E24] focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder:text-gray-600 outline-none transition-colors"
+                        className="w-full min-h-[44px] bg-[#0A0A0C] border border-[#1E1E24] focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-base sm:text-xs text-white placeholder:text-gray-600 outline-none transition-colors"
                       />
                     </div>
 
@@ -459,7 +459,7 @@ export const AuthModal: React.FC = () => {
                                 setErrorMessage(null);
                                 setResetSent(false);
                               }}
-                              className="text-[10px] text-gray-400 hover:text-[#D4AF37] transition-colors cursor-pointer"
+                              className="text-[11px] text-gray-400 hover:text-[#D4AF37] transition-colors cursor-pointer py-1"
                             >
                               {language === 'bn' ? 'পাসওয়ার্ড ভুলে গেছেন?' : 'Forgot password?'}
                             </button>
@@ -472,7 +472,7 @@ export const AuthModal: React.FC = () => {
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           placeholder="••••••••"
-                          className="w-full bg-[#0A0A0C] border border-[#1E1E24] focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder:text-gray-600 outline-none transition-colors"
+                          className="w-full min-h-[44px] bg-[#0A0A0C] border border-[#1E1E24] focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-base sm:text-xs text-white placeholder:text-gray-600 outline-none transition-colors"
                         />
                       </div>
                     )}
@@ -487,7 +487,7 @@ export const AuthModal: React.FC = () => {
                           value={phoneNumber}
                           onChange={(e) => setPhoneNumber(e.target.value)}
                           placeholder="+880 17XXXXXXXX"
-                          className="w-full bg-[#0A0A0C] border border-[#1E1E24] focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder:text-gray-600 outline-none transition-colors font-mono"
+                          className="w-full min-h-[44px] bg-[#0A0A0C] border border-[#1E1E24] focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-base sm:text-xs text-white placeholder:text-gray-600 outline-none transition-colors font-mono"
                         />
                       </div>
                     )}
@@ -495,7 +495,7 @@ export const AuthModal: React.FC = () => {
                     <button
                       type="submit"
                       disabled={isLoading}
-                      className="w-full gold-bg hover:bg-[#E5C158] text-black font-bold uppercase tracking-widest text-xs py-3 px-4 rounded-xl shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2 mt-2 disabled:opacity-50"
+                      className="w-full min-h-[46px] gold-bg hover:bg-[#E5C158] text-black font-bold uppercase tracking-widest text-xs py-3 px-4 rounded-xl shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2 mt-2 disabled:opacity-50"
                     >
                       {isLoading ? (
                         <Loader2 className="w-4 h-4 animate-spin text-black" />
@@ -551,7 +551,7 @@ export const AuthModal: React.FC = () => {
                     {phoneStep === 'input' ? (
                       <form onSubmit={handleSendOtp} className="space-y-3.5">
                         <div>
-                          <label className="block text-[11px] uppercase tracking-wider font-semibold text-gray-400 mb-1">
+                          <label className="block text-[11px] uppercase tracking-wider font-semibold text-gray-400 mb-1.5">
                             {language === 'bn' ? 'আপনার নাম (ঐচ্ছিক)' : 'Full Name (Optional)'}
                           </label>
                           <input
@@ -559,12 +559,12 @@ export const AuthModal: React.FC = () => {
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             placeholder={language === 'bn' ? 'উদা: তানজির আহমেদ' : 'e.g. Tanzir Ahmed'}
-                            className="w-full bg-[#0A0A0C] border border-[#1E1E24] focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder:text-gray-600 outline-none transition-colors"
+                            className="w-full min-h-[44px] bg-[#0A0A0C] border border-[#1E1E24] focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-base sm:text-xs text-white placeholder:text-gray-600 outline-none transition-colors"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-[11px] uppercase tracking-wider font-semibold text-gray-400 mb-1">
+                          <label className="block text-[11px] uppercase tracking-wider font-semibold text-gray-400 mb-1.5">
                             {language === 'bn' ? 'বাংলাদেশি মোবাইল নম্বর' : 'Bangladeshi Mobile (+880)'}
                           </label>
                           <div className="relative">
@@ -574,10 +574,10 @@ export const AuthModal: React.FC = () => {
                               value={phoneNumber}
                               onChange={(e) => setPhoneNumber(e.target.value)}
                               placeholder="01711234567"
-                              className="w-full bg-[#0A0A0C] border border-[#1E1E24] focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder:text-gray-600 outline-none transition-colors font-mono"
+                              className="w-full min-h-[44px] bg-[#0A0A0C] border border-[#1E1E24] focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-base sm:text-xs text-white placeholder:text-gray-600 outline-none transition-colors font-mono"
                             />
                           </div>
-                          <span className="text-[10px] text-gray-500 mt-1 block">
+                          <span className="text-[11px] text-gray-500 mt-1 block">
                             {language === 'bn' ? 'আমরা ৬ ডিজিটের ওটিপি ভেরিফিকেশন কোড পাঠাবো।' : 'We will send a 6-digit OTP verification code via SMS.'}
                           </span>
                         </div>
@@ -585,7 +585,7 @@ export const AuthModal: React.FC = () => {
                         <button
                           type="submit"
                           disabled={isLoading}
-                          className="w-full gold-bg hover:bg-[#E5C158] text-black font-bold uppercase tracking-widest text-xs py-3 px-4 rounded-xl shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                          className="w-full min-h-[46px] gold-bg hover:bg-[#E5C158] text-black font-bold uppercase tracking-widest text-xs py-3 px-4 rounded-xl shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
                         >
                           {isLoading ? (
                             <Loader2 className="w-4 h-4 animate-spin text-black" />
@@ -599,7 +599,7 @@ export const AuthModal: React.FC = () => {
                       </form>
                     ) : (
                       <form onSubmit={handleVerifyOtp} className="space-y-3.5">
-                        <div className="p-3 rounded-xl slate-bg border border-white/5 text-center">
+                        <div className="p-3.5 rounded-xl slate-bg border border-white/5 text-center">
                           <span className="text-xs text-gray-300 block mb-1">
                             {language === 'bn' ? 'প্রেরিত ওটিপি কোডটি লিখুন:' : 'Enter 6-Digit SMS Code sent to:'}
                           </span>
@@ -609,19 +609,20 @@ export const AuthModal: React.FC = () => {
                         </div>
 
                         <div>
-                          <label className="block text-[11px] uppercase tracking-wider font-semibold text-gray-400 mb-1">
+                          <label className="block text-[11px] uppercase tracking-wider font-semibold text-gray-400 mb-1.5">
                             6-Digit OTP Code
                           </label>
                           <input
                             type="text"
+                            inputMode="numeric"
                             maxLength={6}
                             required
                             value={otpCode}
                             onChange={(e) => setOtpCode(e.target.value)}
                             placeholder="123456"
-                            className="w-full bg-[#0A0A0C] border border-[#1E1E24] focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-center text-lg tracking-[0.3em] font-mono text-white placeholder:text-gray-600 outline-none transition-colors"
+                            className="w-full min-h-[48px] bg-[#0A0A0C] border border-[#1E1E24] focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-center text-lg tracking-[0.3em] font-mono text-white placeholder:text-gray-600 outline-none transition-colors"
                           />
-                          <p className="text-[10px] text-gray-500 text-center mt-1">
+                          <p className="text-[11px] text-gray-500 text-center mt-1">
                             {language === 'bn' ? 'টেস্টিং কোড: 123456 ব্যবহার করতে পারেন' : 'For quick testing in preview: 123456'}
                           </p>
                         </div>
@@ -629,7 +630,7 @@ export const AuthModal: React.FC = () => {
                         <button
                           type="submit"
                           disabled={isLoading}
-                          className="w-full gold-bg hover:bg-[#E5C158] text-black font-bold uppercase tracking-widest text-xs py-3 px-4 rounded-xl shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                          className="w-full min-h-[46px] gold-bg hover:bg-[#E5C158] text-black font-bold uppercase tracking-widest text-xs py-3 px-4 rounded-xl shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
                         >
                           {isLoading ? (
                             <Loader2 className="w-4 h-4 animate-spin text-black" />
@@ -644,7 +645,7 @@ export const AuthModal: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => { setPhoneStep('input'); setErrorMessage(null); }}
-                          className="w-full text-center text-xs text-gray-400 hover:text-white pt-2 cursor-pointer"
+                          className="w-full min-h-[40px] text-center text-xs text-gray-400 hover:text-white pt-1 cursor-pointer"
                         >
                           {language === 'bn' ? '← নম্বর পরিবর্তন করুন' : '← Change Phone Number'}
                         </button>
@@ -660,7 +661,7 @@ export const AuthModal: React.FC = () => {
                       type="button"
                       disabled={isLoading}
                       onClick={handleGoogleSignIn}
-                      className="w-full bg-white hover:bg-gray-100 text-black font-bold text-xs py-3 px-4 rounded-xl shadow transition-all cursor-pointer flex items-center justify-center gap-3 disabled:opacity-50"
+                      className="w-full min-h-[46px] bg-white hover:bg-gray-100 text-black font-bold text-xs py-3 px-4 rounded-xl shadow transition-all cursor-pointer flex items-center justify-center gap-3 disabled:opacity-50"
                     >
                       <svg className="w-4 h-4" viewBox="0 0 24 24">
                         <path

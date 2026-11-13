@@ -150,23 +150,23 @@ export const AIAssistantWidget: React.FC = () => {
         <motion.div
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="fixed bottom-20 md:bottom-8 right-4 md:right-8 z-40"
+          className="fixed bottom-[76px] md:bottom-8 right-3.5 md:right-8 z-40"
         >
           <div className="relative group">
-            {/* Tooltip badge on hover */}
-            <div className="absolute right-0 bottom-full mb-3 hidden group-hover:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#121218] border border-[#D4AF37]/40 shadow-2xl text-xs text-white whitespace-nowrap pointer-events-none transition-all">
-              <span className="inline-block w-1.5 h-1.5 rounded-full gold-bg animate-ping" />
+            {/* Tooltip badge on desktop hover */}
+            <div className="absolute right-0 bottom-full mb-3 hidden lg:group-hover:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#121218] border border-[#D4AF37]/40 shadow-2xl text-xs text-white whitespace-nowrap pointer-events-none transition-all">
               <span>{language === 'bn' ? 'লুক্সোরা এআই কনসিয়ার্জ • ২৪/৭ সহায়তা' : 'Luxora AI Assistant • 24/7 Concierge'}</span>
             </div>
 
             <button
+              type="button"
               onClick={() => setIsOpen(true)}
-              className="w-14 h-14 rounded-full gold-bg text-black shadow-2xl shadow-[#D4AF37]/30 flex items-center justify-center hover:scale-110 hover:brightness-110 active:scale-95 transition-all duration-300 cursor-pointer border border-[#E5C158]"
+              className="w-12 h-12 sm:w-14 sm:h-14 rounded-full gold-bg text-black shadow-2xl shadow-[#D4AF37]/30 flex items-center justify-center hover:scale-105 hover:brightness-110 active:scale-95 transition-all duration-200 cursor-pointer border border-[#E5C158]"
               aria-label="Open AI Assistant"
             >
               <div className="relative">
                 <Bot className="w-6 h-6" />
-                <Sparkles className="w-3.5 h-3.5 absolute -top-1.5 -right-1.5 text-black animate-spin" style={{ animationDuration: '6s' }} />
+                <Sparkles className="w-3.5 h-3.5 absolute -top-1.5 -right-1.5 text-black" />
               </div>
             </button>
           </div>
@@ -177,59 +177,63 @@ export const AIAssistantWidget: React.FC = () => {
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 30, scale: 0.95 }}
+            initial={{ opacity: 0, y: 24, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 30, scale: 0.95 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className={`fixed bottom-4 md:bottom-8 right-4 md:right-8 z-50 w-[calc(100vw-32px)] sm:w-[420px] rounded-3xl bg-[#0D0D12]/95 backdrop-blur-2xl border border-[#262636] shadow-2xl shadow-black/90 flex flex-col overflow-hidden text-[#EDEDED] ${
-              isMinimized ? 'h-[72px]' : 'h-[580px] max-h-[85vh]'
+            exit={{ opacity: 0, y: 24, scale: 0.96 }}
+            transition={{ type: 'spring', damping: 26, stiffness: 280 }}
+            className={`fixed bottom-4 md:bottom-8 inset-x-3 sm:left-auto sm:right-6 md:right-8 z-50 sm:w-[400px] md:w-[420px] rounded-3xl bg-[#0D0D12]/95 backdrop-blur-2xl border border-[#262636] shadow-2xl shadow-black/90 flex flex-col overflow-hidden text-[#EDEDED] ${
+              isMinimized ? 'h-[72px]' : 'h-[540px] max-h-[82vh]'
             }`}
           >
             {/* Luxury Header */}
-            <div className="p-4 bg-[#14141C] border-b border-[#222230] flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="relative">
+            <div className="p-3.5 sm:p-4 bg-[#14141C] border-b border-[#222230] flex items-center justify-between shrink-0 gap-2">
+              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                <div className="relative shrink-0">
                   <div className="w-10 h-10 rounded-2xl gold-bg text-black flex items-center justify-center font-bold shadow-md shadow-[#D4AF37]/20">
                     <Bot className="w-5 h-5" />
                   </div>
-                  <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[#14141C]" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <h3 className="text-sm font-bold text-white font-luxury">
+                    <h3 className="text-sm font-bold text-white font-luxury truncate">
                       Luxora AI Concierge
                     </h3>
-                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30 font-bold">
+                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30 font-bold shrink-0">
                       24/7
                     </span>
                   </div>
-                  <p className="text-[11px] text-emerald-400 flex items-center gap-1">
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>{language === 'bn' ? 'অনলাইন • তাৎক্ষণিক উত্তর' : 'Online • Instant Responses'}</span>
+                  <p className="text-[11px] text-emerald-400 truncate">
+                    {language === 'bn' ? 'অনলাইন • তাৎক্ষণিক উত্তর' : 'Online • Instant Responses'}
                   </p>
                 </div>
               </div>
 
               {/* Controls */}
-              <div className="flex items-center gap-1 text-gray-400">
+              <div className="flex items-center gap-0.5 text-gray-400 shrink-0">
                 <button
+                  type="button"
                   onClick={handleResetChat}
-                  className="p-1.5 rounded-lg hover:bg-white/5 hover:text-white transition-colors cursor-pointer"
+                  className="min-w-[38px] min-h-[38px] flex items-center justify-center rounded-xl hover:bg-white/5 hover:text-white transition-colors cursor-pointer"
                   title="Reset conversation"
+                  aria-label="Reset conversation"
                 >
                   <RotateCcw className="w-4 h-4" />
                 </button>
                 <button
+                  type="button"
                   onClick={() => setIsMinimized(!isMinimized)}
-                  className="p-1.5 rounded-lg hover:bg-white/5 hover:text-white transition-colors cursor-pointer"
+                  className="min-w-[38px] min-h-[38px] flex items-center justify-center rounded-xl hover:bg-white/5 hover:text-white transition-colors cursor-pointer"
                   title={isMinimized ? 'Expand' : 'Minimize'}
+                  aria-label={isMinimized ? 'Expand' : 'Minimize'}
                 >
                   {isMinimized ? <Maximize2 className="w-4 h-4" /> : <Minimize2 className="w-4 h-4" />}
                 </button>
                 <button
+                  type="button"
                   onClick={() => setIsOpen(false)}
-                  className="p-1.5 rounded-lg hover:bg-white/5 hover:text-white transition-colors cursor-pointer"
+                  className="min-w-[38px] min-h-[38px] flex items-center justify-center rounded-xl hover:bg-white/5 hover:text-white transition-colors cursor-pointer"
                   title="Close"
+                  aria-label="Close AI assistant"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -335,12 +339,12 @@ export const AIAssistantWidget: React.FC = () => {
                       value={inputText}
                       onChange={(e) => setInputText(e.target.value)}
                       placeholder={language === 'bn' ? 'যেকোনো প্রশ্ন লিখুন...' : 'Ask about products, delivery, warranty...'}
-                      className="flex-1 bg-[#0C0C10] border border-[#2A2A38] focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-gray-500 focus:outline-none transition-colors"
+                      className="flex-1 min-h-[44px] bg-[#0C0C10] border border-[#2A2A38] focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-base sm:text-xs text-white placeholder-gray-500 focus:outline-none transition-colors"
                     />
                     <button
                       type="submit"
                       disabled={!inputText.trim() || isLoading}
-                      className="p-2.5 rounded-xl gold-bg text-black hover:brightness-110 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0 shadow-md shadow-[#D4AF37]/20"
+                      className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl gold-bg text-black hover:brightness-110 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0 shadow-md shadow-[#D4AF37]/20"
                       aria-label="Send message"
                     >
                       <Send className="w-4 h-4" />

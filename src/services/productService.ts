@@ -54,6 +54,7 @@ export function sanitizeProductData(input: Partial<Product>, fallbackId?: string
     taglineBn: (input.taglineBn || '').trim(),
     brand: (input.brand || '').trim() || 'Luxora Prime',
     category: (input.category || 'audio') as ProductCategory,
+    freeDelivery: Boolean(input.freeDelivery || input.category === 'free-delivery'),
     price: priceNum,
     originalPrice: origPriceNum,
     rating: Number(input.rating) || 4.9,
@@ -72,6 +73,8 @@ export function sanitizeProductData(input: Partial<Product>, fallbackId?: string
     badge: input.badge || 'new',
     isFeatured: Boolean(input.isFeatured),
     colors: Array.isArray(input.colors) ? input.colors : [],
+    sizes: Array.isArray(input.sizes) ? input.sizes : [],
+    variants: Array.isArray(input.variants) ? input.variants : [],
     createdAt: input.createdAt || now,
     updatedAt: now,
   };

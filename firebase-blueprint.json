@@ -36,7 +36,7 @@
         "descriptionBn": { "type": "string", "maxLength": 2000, "description": "Full Bengali description" },
         "price": { "type": "number", "description": "Current selling price in BDT" },
         "originalPrice": { "type": "number", "description": "Original MSRP before discount in BDT" },
-        "category": { "type": "string", "enum": ["audio", "wearables", "desk-charging", "apple-ecosystem", "photography", "lifestyle"], "description": "Primary product category" },
+        "category": { "type": "string", "maxLength": 80, "description": "Primary product category slug" },
         "brand": { "type": "string", "maxLength": 60, "description": "Brand manufacturer" },
         "image": { "type": "string", "maxLength": 500, "description": "Main cover image URL" },
         "gallery": { "type": "array", "description": "Additional gallery image URLs" },
@@ -142,6 +142,26 @@
         "updatedBy": { "type": "string" }
       },
       "required": ["gateways", "sendMoneyStrictRule", "updatedAt"]
+    },
+    "HeroBanner": {
+      "title": "HeroBanner",
+      "description": "Promotional hero carousel banner slide for Luxora BD storefront",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "titleEn": { "type": "string", "maxLength": 150 },
+        "titleBn": { "type": "string", "maxLength": 150 },
+        "subtitleEn": { "type": "string", "maxLength": 300 },
+        "subtitleBn": { "type": "string", "maxLength": 300 },
+        "ctaTextEn": { "type": "string", "maxLength": 60 },
+        "ctaTextBn": { "type": "string", "maxLength": 60 },
+        "targetCategory": { "type": "string", "maxLength": 80 },
+        "imageUrl": { "type": "string" },
+        "order": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "imageUrl", "order", "isActive"]
     }
   },
   "firestore": {
@@ -157,6 +177,10 @@
       "schema": { "$ref": "Category" },
       "description": "Public category directory"
     },
+    "/banners/{bannerId}": {
+      "schema": { "$ref": "HeroBanner" },
+      "description": "Public storefront hero carousel banners"
+    },
     "/orders/{orderId}": {
       "schema": { "$ref": "Order" },
       "description": "Customer order purchase records"
@@ -167,7 +191,7 @@
     },
     "/settings/{settingId}": {
       "schema": { "$ref": "PaymentSettings" },
-      "description": "System-wide payment gateway and operational settings"
+      "description": "System-wide payment gateway, return policy, and storefront settings"
     }
   }
 }
