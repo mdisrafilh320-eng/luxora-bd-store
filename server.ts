@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -81,10 +81,9 @@ app.post("/api/ai/chat", async (req, res) => {
     // If Gemini API Key is configured on the server
     if (aiClient) {
       const chat = aiClient.chats.create({
-        model: "gemini-3.7-flash",
+        model: "gemini-4-hydrogen",
         config: {
           systemInstruction: SYSTEM_INSTRUCTION + `\nPreferred customer language: ${language === 'bn' ? 'Bengali (বাংলা)' : 'English'}.`,
-          temperature: 0.7,
         },
       });
 
@@ -103,7 +102,7 @@ app.post("/api/ai/chat", async (req, res) => {
       res.json({ 
         success: true, 
         reply: reply.trim(),
-        provider: "gemini-3.7-flash"
+        provider: "gemini-4-hydrogen"
       });
       return;
     }
@@ -124,6 +123,120 @@ app.post("/api/ai/chat", async (req, res) => {
       reply: fallbackResponse,
       provider: "fallback-recovery"
     });
+  }
+});
+
+// AI-Powered Product Auto-Fill & Spec Formatter Endpoint
+app.post("/api/ai/format-product", async (req, res) => {
+  try {
+    const { rawNotes, categories = [], language = "en" } = req.body || {};
+
+    if (!rawNotes || typeof rawNotes !== "string" || !rawNotes.trim()) {
+      res.status(400).json({ error: "Please paste raw product notes or specs first." });
+      return;
+    }
+
+    const availableCategories = Array.isArray(categories)
+      ? categories
+          .filter((c: any) => c && typeof c.slug === "string")
+          .map((c: any) => ({
+            slug: String(c.slug),
+            nameEn: String(c.nameEn || c.slug),
+            nameBn: String(c.nameBn || c.nameEn || c.slug),
+          }))
+      : [];
+
+    if (aiClient) {
+      try {
+        const categorySummary = availableCategories.length > 0
+          ? availableCategories.map((c) => `- slug: "${c.slug}" (EN: ${c.nameEn}, BN: ${c.nameBn})`).join("\n")
+          : `- slug: "gadgets" (EN: Gadgets, BN: গ্যাজেট)\n- slug: "audio" (EN: Audio, BN: অডিও)\n- slug: "wearables" (EN: Wearables, BN: স্মার্টওয়াচ)\n- slug: "fashion" (EN: Fashion, BN: ফ্যাশন)\n- slug: "luxury" (EN: Luxury, BN: লাক্সারি)`;
+
+        const prompt = `Transform the following raw product notes/specifications into a polished, luxury e-commerce catalog entry for Luxora BD (Bangladesh).
+
+Available Store Categories (pick the SINGLE best matching slug for suggestedCategory):
+${categorySummary}
+
+Raw Product Notes / Specs:
+"""
+${rawNotes.trim()}
+"""
+
+Requirements:
+1. Format clean, attractive English and Bengali product titles (nameEn, nameBn) and short taglines (taglineEn, taglineBn).
+2. Identify the Brand name.
+3. Choose the best matching category slug from the Available Store Categories list above.
+4. Parse technical features/specs into 4-8 clean structured specification key-value items (specs array with labelEn, labelBn, valueEn, valueBn).
+5. Write a persuasive, professional luxury product description in English (descriptionEn) and Bengali (descriptionBn), each opening with a 2-sentence overview followed by concise "• " bullet-point highlights.
+6. Extract price, originalPrice, stockCount, warrantyEn, and freeDelivery if mentioned in the notes (use 0 for prices/stock if not mentioned).`;
+
+        const response = await aiClient.models.generateContent({
+          model: "gemini-4-hydrogen",
+          contents: prompt,
+          config: {
+            systemInstruction:
+              "You are a senior e-commerce merchandiser and bilingual copywriter for Luxora BD, a minimalist luxury store in Bangladesh. Output strictly valid JSON matching the requested schema.",
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                nameEn: { type: Type.STRING, description: "Polished English product title" },
+                nameBn: { type: Type.STRING, description: "Polished Bengali product title" },
+                taglineEn: { type: Type.STRING, description: "Short English tagline (4-8 words)" },
+                taglineBn: { type: Type.STRING, description: "Short Bengali tagline" },
+                brand: { type: Type.STRING, description: "Product brand name" },
+                suggestedCategory: { type: Type.STRING, description: "Exact slug from available categories" },
+                descriptionEn: { type: Type.STRING, description: "Professional English description with bullet points" },
+                descriptionBn: { type: Type.STRING, description: "Professional Bengali description with bullet points" },
+                specs: {
+                  type: Type.ARRAY,
+                  description: "Key technical specs parsed as label/value pairs",
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      labelEn: { type: Type.STRING },
+                      labelBn: { type: Type.STRING },
+                      valueEn: { type: Type.STRING },
+                      valueBn: { type: Type.STRING },
+                    },
+                  },
+                },
+                suggestedPrice: { type: Type.NUMBER, description: "Selling price in BDT if present, else 0" },
+                suggestedOriginalPrice: { type: Type.NUMBER, description: "Original MSRP in BDT if present, else 0" },
+                suggestedStockCount: { type: Type.NUMBER, description: "Stock count if present, else 0" },
+                freeDelivery: { type: Type.BOOLEAN, description: "True if notes mention free delivery" },
+                warrantyEn: { type: Type.STRING, description: "Warranty text if mentioned or standard Luxora warranty" },
+                suggestedBadge: { type: Type.STRING, description: "One of: new, bestseller, limited" },
+              },
+            },
+          },
+        });
+
+        const jsonText = (response.text || "").trim();
+        if (jsonText) {
+          const parsed = JSON.parse(jsonText);
+          res.json({
+            success: true,
+            provider: "gemini-4-hydrogen",
+            data: parsed,
+          });
+          return;
+        }
+      } catch (aiErr: any) {
+        console.warn("Gemini product formatting fallback triggered:", aiErr?.message || aiErr);
+      }
+    }
+
+    // Deterministic smart spec parser fallback if Gemini API key is missing or temporarily unavailable
+    const fallbackData = parseRawProductNotesFallback(rawNotes, availableCategories, language);
+    res.json({
+      success: true,
+      provider: "smart-spec-parser",
+      data: fallbackData,
+    });
+  } catch (error: any) {
+    console.error("Error in /api/ai/format-product:", error);
+    res.status(500).json({ error: error?.message || "Failed to format product notes." });
   }
 });
 
@@ -274,6 +387,137 @@ You will receive an instant Order ID (e.g. LUX-XXXXXX) to track live status.`;
   return `Welcome to Luxora BD Concierge! 
 
 I can assist you with product specifications, nationwide delivery rates (Dhaka ৳70, Nationwide ৳120, Free above ৳5,000), bKash/Nagad payments, real-time courier tracking, and our 7-day replacement warranty. How may I assist you today?`;
+}
+
+// Intelligent Rule-Based Product Notes Parser Fallback
+function parseRawProductNotesFallback(
+  rawNotes: string,
+  availableCategories: Array<{ slug: string; nameEn: string; nameBn: string }>,
+  _language: string
+) {
+  const lines = rawNotes
+    .split(/\r?\n/)
+    .map((l) => l.replace(/^[-*•\u2022]\s*/, "").trim())
+    .filter(Boolean);
+
+  const firstLine = lines[0] || rawNotes.trim().slice(0, 80);
+  const cleanedTitle = firstLine
+    .replace(/^(title|name|product)\s*[:\-]\s*/i, "")
+    .replace(/\b(price|tk|bdt|৳|mrp|msrp)\s*[:\-]?\s*[\d,]+/gi, "")
+    .trim();
+
+  const knownBrands = [
+    "Apple", "Sony", "Samsung", "Bang & Olufsen", "B&O", "Bose", "Anker",
+    "Marshall", "Sennheiser", "Garmin", "Devialet", "Belkin", "Nomad",
+    "Satechi", "Logitech", "Keychron", "JBL", "Beats", "DJI", "Leica",
+    "Rolex", "Omega", "Tissot", "Seiko", "Casio", "Nothing", "Xiaomi",
+  ];
+  const lowerAll = rawNotes.toLowerCase();
+  const detectedBrand =
+    knownBrands.find((b) => lowerAll.includes(b.toLowerCase())) ||
+    cleanedTitle.split(/\s+/)[0] ||
+    "Luxora Prime";
+
+  // Extract Price & MSRP
+  const priceMatch = rawNotes.match(/(?:price|offer|sale|tk|bdt|৳)\s*[:\-]?\s*([\d,]{3,7})/i);
+  const msrpMatch = rawNotes.match(/(?:msrp|mrp|original|old|regular)\s*[:\-]?\s*(?:৳|tk|bdt)?\s*([\d,]{3,7})/i);
+  const stockMatch = rawNotes.match(/(?:stock|qty|quantity|units?)\s*[:\-]?\s*(\d{1,5})/i);
+
+  const suggestedPrice = priceMatch ? Number(priceMatch[1].replace(/,/g, "")) : 0;
+  const suggestedOriginalPrice = msrpMatch ? Number(msrpMatch[1].replace(/,/g, "")) : 0;
+  const suggestedStockCount = stockMatch ? Number(stockMatch[1]) : 0;
+  const freeDelivery = /free\s*(delivery|shipping)|ফ্রি\s*ডেলিভারি/i.test(rawNotes);
+
+  // Category matching against dynamic storefront categories
+  const categoryKeywords: Record<string, string[]> = {
+    audio: ["headphone", "earbud", "earphone", "airpods", "speaker", "anc", "bluetooth audio", "soundbar", "hi-fi", "wh-1000", "bose", "jbl", "marshall", "devialet"],
+    wearables: ["watch", "smartwatch", "band", "fitness", "garmin", "amoled", "strap", "heart rate"],
+    gadgets: ["charger", "powerbank", "power bank", "hub", "cable", "magsafe", "keyboard", "mouse", "camera", "drone", "gimbal", "gan", "usb-c"],
+    fashion: ["bag", "wallet", "leather", "sunglass", "perfume", "apparel", "jacket", "shoe", "belt"],
+    luxury: ["luxury", "titanium", "edition", "limited", "gold", "bespoke", "crafted"],
+    "free-delivery": ["free delivery", "free shipping"],
+  };
+
+  let suggestedCategory = availableCategories[0]?.slug || "gadgets";
+  for (const cat of availableCategories) {
+    const slugLower = cat.slug.toLowerCase();
+    if (lowerAll.includes(slugLower) || lowerAll.includes(cat.nameEn.toLowerCase())) {
+      suggestedCategory = cat.slug;
+      break;
+    }
+    const keywords = categoryKeywords[slugLower] || [];
+    if (keywords.some((kw) => lowerAll.includes(kw))) {
+      suggestedCategory = cat.slug;
+      break;
+    }
+  }
+
+  // Extract specification bullet points from remaining lines / comma-separated tokens
+  const specCandidates: string[] = [];
+  const remainingLines = lines.slice(1);
+  for (const line of remainingLines) {
+    if (/^(price|mrp|msrp|original|stock|qty)\s*[:\-]/i.test(line)) continue;
+    if (line.includes(",") && !line.includes(":")) {
+      line.split(",").map((p) => p.trim()).filter(Boolean).forEach((p) => specCandidates.push(p));
+    } else {
+      specCandidates.push(line);
+    }
+  }
+
+  if (specCandidates.length === 0 && rawNotes.includes(",")) {
+    rawNotes.split(",").slice(1).map((p) => p.trim()).filter(Boolean).forEach((p) => specCandidates.push(p));
+  }
+
+  const specs = specCandidates.slice(0, 8).map((item, idx) => {
+    const colonIdx = item.indexOf(":");
+    if (colonIdx > 1 && colonIdx < 35) {
+      const label = item.slice(0, colonIdx).trim();
+      const val = item.slice(colonIdx + 1).trim();
+      return {
+        labelEn: label,
+        labelBn: label,
+        valueEn: val || label,
+        valueBn: val || label,
+      };
+    }
+    return {
+      labelEn: `Highlight ${idx + 1}`,
+      labelBn: `বৈশিষ্ট্য ${idx + 1}`,
+      valueEn: item,
+      valueBn: item,
+    };
+  });
+
+  if (specs.length === 0) {
+    specs.push(
+      { labelEn: "Brand", labelBn: "ব্র্যান্ড", valueEn: detectedBrand, valueBn: detectedBrand },
+      { labelEn: "Authenticity", labelBn: "নিশ্চয়তা", valueEn: "100% Original Sealed Unit", valueBn: "১০০% অরিজিনাল সিল্ড প্যাক" }
+    );
+  }
+
+  const bulletLinesEn = specs.map((s) => `• ${s.labelEn}: ${s.valueEn}`).join("\n");
+  const bulletLinesBn = specs.map((s) => `• ${s.labelBn}: ${s.valueBn}`).join("\n");
+
+  const nameEn = cleanedTitle || "Luxora Curated Flagship Edition";
+  const nameBn = `${nameEn} (অফিশিয়াল এডিশন)`;
+
+  return {
+    nameEn,
+    nameBn,
+    taglineEn: `${detectedBrand} Signature Precision Craftsmanship`,
+    taglineBn: `${detectedBrand} প্রিমিয়াম কালেকশন`,
+    brand: detectedBrand,
+    suggestedCategory,
+    descriptionEn: `Experience refined performance and enduring build quality with the ${nameEn} by ${detectedBrand}. Curated exclusively for discerning collectors in Bangladesh with verified authenticity and official warranty coverage.\n\nKey Specifications:\n${bulletLinesEn}`,
+    descriptionBn: `${detectedBrand}-এর অসাধারণ ডিজাইন ও প্রিমিয়াম পারফরম্যান্স সমৃদ্ধ ${nameEn}। ১০০% অরিজিনাল নিশ্চয়তা ও অফিশিয়াল ওয়ারেন্টিসহ এখন লাক্সোরা বিডি-তে উপলব্ধ।\n\nমূল বৈশিষ্ট্যসমূহ:\n${bulletLinesBn}`,
+    specs,
+    suggestedPrice,
+    suggestedOriginalPrice,
+    suggestedStockCount,
+    freeDelivery,
+    warrantyEn: "2 Years Official Luxora Bangladesh Warranty",
+    suggestedBadge: /limited|edition/i.test(rawNotes) ? "limited" : /best|top|flagship/i.test(rawNotes) ? "bestseller" : "new",
+  };
 }
 
 // Start Server with Vite Middleware

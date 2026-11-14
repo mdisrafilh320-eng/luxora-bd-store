@@ -35,12 +35,16 @@ import {
   Crown,
   LogOut,
   UserCheck,
-  MapPin
+  MapPin,
+  Wand2,
+  ListChecks,
+  Loader2
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { Order, Product, OrderStatus, PaymentStatus, ProductCategory } from '../../types';
+import { Order, Product, OrderStatus, PaymentStatus, ProductCategory, ProductSpec } from '../../types';
 import { orderService } from '../../services/orderService';
 import { productService } from '../../services/productService';
+import { formatProductNotesWithAI } from '../../services/aiAssistantService';
 import { 
   calculateExecutiveMetrics, 
   generateFinancialLedger, 
@@ -95,12 +99,16 @@ export const AdminERPView: React.FC = () => {
     estimatedDelivery: 'Tomorrow by 06:00 PM',
   });
 
-  // Product CRUD Modal States
+  // Product CRUD & Smart AI Upload Modal States
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isSavingProduct, setIsSavingProduct] = useState(false);
   const [productToDelete, setProductToDelete] = useState<{ id: string; name: string } | null>(null);
   const [isDeletingProduct, setIsDeletingProduct] = useState(false);
+  const [rawProductNotes, setRawProductNotes] = useState('');
+  const [isFormattingWithAI, setIsFormattingWithAI] = useState(false);
+  const [aiSuggestedCategorySlug, setAiSuggestedCategorySlug] = useState<string | null>(null);
+  const [showAiPanel, setShowAiPanel] = useState(true);
   const [productFormData, setProductFormData] = useState<Partial<Product>>({
     nameEn: '',
     nameBn: '',
@@ -108,6 +116,7 @@ export const AdminERPView: React.FC = () => {
     taglineBn: '',
     descriptionEn: '',
     descriptionBn: '',
+    specs: [],
     price: 10000,
     originalPrice: 12000,
     category: 'audio',
@@ -292,10 +301,13 @@ export const AdminERPView: React.FC = () => {
     }
   };
 
-  // Handle Product CRUD
-  const handleOpenAddProduct = () => {
+  // Handle Product CRUD & Smart AI Upload
+  const handleOpenAddProduct = (smartExpanded = true) => {
     const newId = `lux-prod-${Date.now().toString(36)}`;
     setEditingProduct(null);
+    setRawProductNotes('');
+    setAiSuggestedCategorySlug(null);
+    setShowAiPanel(smartExpanded);
     setProductFormData({
       id: newId,
       nameEn: '',
@@ -304,6 +316,7 @@ export const AdminERPView: React.FC = () => {
       taglineBn: '',
       descriptionEn: '',
       descriptionBn: '',
+      specs: [],
       price: 15000,
       originalPrice: 18000,
       category: categories?.[0]?.slug || 'gadgets',
@@ -326,12 +339,110 @@ export const AdminERPView: React.FC = () => {
 
   const handleOpenEditProduct = (prod: Product) => {
     setEditingProduct(prod);
+    setRawProductNotes('');
+    setAiSuggestedCategorySlug(null);
+    setShowAiPanel(false);
+    const cleanedGallery = (prod.gallery || []).filter((u) => u && u !== prod.image);
     setProductFormData({ 
       ...prod,
       image: prod.image || '',
-      gallery: prod.gallery || [],
+      gallery: cleanedGallery,
+      specs: Array.isArray(prod.specs) ? prod.specs : [],
     });
     setIsProductModalOpen(true);
+  };
+
+  const handleAIAutoFill = async () => {
+    if (!rawProductNotes.trim()) {
+      addToast({
+        type: 'warning',
+        titleEn: 'Raw Notes Required',
+        titleBn: 'পণ্যের নোট দিন',
+        descriptionEn: 'Paste raw supplier notes, title, or specs before running AI Auto-Fill.',
+        descriptionBn: 'এআই অটো-ফিল চালাতে প্রথমে পণ্যের নোট বা স্পেসিফিকেশন পেস্ট করুন।',
+      });
+      return;
+    }
+
+    setIsFormattingWithAI(true);
+    try {
+      const formatted = await formatProductNotesWithAI(rawProductNotes, categories, language);
+
+      setAiSuggestedCategorySlug(formatted.suggestedCategory);
+      setProductFormData((prev) => ({
+        ...prev,
+        nameEn: formatted.nameEn || prev.nameEn,
+        nameBn: formatted.nameBn || prev.nameBn,
+        taglineEn: formatted.taglineEn || prev.taglineEn,
+        taglineBn: formatted.taglineBn || prev.taglineBn,
+        brand: formatted.brand || prev.brand,
+        category: formatted.suggestedCategory || prev.category,
+        descriptionEn: formatted.descriptionEn || prev.descriptionEn,
+        descriptionBn: formatted.descriptionBn || prev.descriptionBn,
+        specs: formatted.specs.length > 0 ? formatted.specs : prev.specs,
+        price: formatted.suggestedPrice > 0 ? formatted.suggestedPrice : prev.price,
+        originalPrice:
+          formatted.suggestedOriginalPrice > 0
+            ? formatted.suggestedOriginalPrice
+            : formatted.suggestedPrice > 0
+            ? Math.round(formatted.suggestedPrice * 1.15)
+            : prev.originalPrice,
+        stockCount: formatted.suggestedStockCount > 0 ? formatted.suggestedStockCount : prev.stockCount,
+        freeDelivery: formatted.freeDelivery || prev.freeDelivery,
+        warrantyEn: formatted.warrantyEn || prev.warrantyEn,
+        badge: formatted.suggestedBadge || prev.badge,
+      }));
+
+      addToast({
+        type: 'success',
+        titleEn: 'AI Auto-Fill Complete',
+        titleBn: 'এআই অটো-ফিল সম্পন্ন হয়েছে',
+        descriptionEn: `Formatted title, ${formatted.specs.length} spec bullets, description & suggested category "${formatted.suggestedCategory}".`,
+        descriptionBn: `শিরোনাম, ${formatted.specs.length}টি স্পেসিফিকেশন বুলেট, বিবরণ এবং ক্যাটাগরি স্বয়ংক্রিয়ভাবে পূরণ করা হয়েছে।`,
+      });
+    } catch (err: any) {
+      console.error('AI Product Format Error:', err);
+      addToast({
+        type: 'error',
+        titleEn: 'AI Formatting Failed',
+        titleBn: 'এআই ফরম্যাটিং ব্যর্থ হয়েছে',
+        descriptionEn: err?.message || 'Could not format product notes automatically.',
+        descriptionBn: 'স্বয়ংক্রিয়ভাবে তথ্য ফরম্যাট করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।',
+      });
+    } finally {
+      setIsFormattingWithAI(false);
+    }
+  };
+
+  const handleAddSpecRow = () => {
+    setProductFormData((prev) => ({
+      ...prev,
+      specs: [
+        ...(prev.specs || []),
+        { labelEn: '', labelBn: '', valueEn: '', valueBn: '' },
+      ],
+    }));
+  };
+
+  const handleUpdateSpecRow = (index: number, field: keyof ProductSpec, val: string) => {
+    setProductFormData((prev) => {
+      const next = [...(prev.specs || [])];
+      if (!next[index]) return prev;
+      next[index] = {
+        ...next[index],
+        [field]: val,
+        ...(field === 'labelEn' && !next[index].labelBn ? { labelBn: val } : {}),
+        ...(field === 'valueEn' && !next[index].valueBn ? { valueBn: val } : {}),
+      };
+      return { ...prev, specs: next };
+    });
+  };
+
+  const handleRemoveSpecRow = (index: number) => {
+    setProductFormData((prev) => ({
+      ...prev,
+      specs: (prev.specs || []).filter((_, i) => i !== index),
+    }));
   };
 
   const handleSaveProduct = async (e: React.FormEvent) => {
@@ -349,14 +460,15 @@ export const AdminERPView: React.FC = () => {
       return;
     }
 
-    // 2. Image validation: ensure at least 1 image is set as main cover
-    if (!productFormData.image?.trim()) {
+    // 2. Image validation: ensure at least 1 image is set as Cover Photo
+    const coverImageUrl = (productFormData.image || '').trim();
+    if (!coverImageUrl) {
       addToast({
         type: 'error',
-        titleEn: 'Product Image Required',
-        titleBn: 'পণ্যের ছবি আবশ্যক',
-        descriptionEn: 'Please upload or provide at least 1 image to serve as the product main cover.',
-        descriptionBn: 'পণ্য ক্যাটালগে সংরক্ষণের পূর্বে অন্তত একটি প্রধান ছবি আপলোড করুন।',
+        titleEn: 'Cover Photo Required',
+        titleBn: 'কভার ফটো আবশ্যক',
+        descriptionEn: 'Please upload or provide at least 1 image to serve as the Cover Photo.',
+        descriptionBn: 'পণ্য সংরক্ষণের পূর্বে অন্তত একটি কভার ফটো আপলোড করুন।',
       });
       return;
     }
@@ -377,14 +489,29 @@ export const AdminERPView: React.FC = () => {
     setIsSavingProduct(true);
 
     try {
-      const sanitizedGallery = (productFormData.gallery || [])
-        .filter((u) => u && u !== productFormData.image)
-        .slice(0, 4);
+      // Structure all images (up to 10 total) with designated Cover Photo URL FIRST in gallery + primary image field
+      const otherGalleryUrls = (productFormData.gallery || [])
+        .map((u) => (u || '').trim())
+        .filter((u, idx, arr) => Boolean(u) && u !== coverImageUrl && arr.indexOf(u) === idx)
+        .slice(0, 9);
+
+      const orderedAllImages = [coverImageUrl, ...otherGalleryUrls];
+
+      const cleanedSpecs = (productFormData.specs || [])
+        .filter((s) => s && (s.labelEn?.trim() || s.valueEn?.trim()))
+        .map((s) => ({
+          labelEn: (s.labelEn || 'Spec').trim(),
+          labelBn: (s.labelBn || s.labelEn || 'বৈশিষ্ট্য').trim(),
+          valueEn: (s.valueEn || '').trim(),
+          valueBn: (s.valueBn || s.valueEn || '').trim(),
+        }));
 
       if (editingProduct) {
         const updated = await productService.updateProduct(editingProduct.id, {
           ...productFormData,
-          gallery: sanitizedGallery,
+          image: coverImageUrl,
+          gallery: orderedAllImages,
+          specs: cleanedSpecs,
         });
 
         // Immediately update React context state so UI updates in real time
@@ -394,7 +521,7 @@ export const AdminERPView: React.FC = () => {
           type: 'success',
           titleEn: 'Product Updated',
           titleBn: 'পণ্য তথ্য আপডেট হয়েছে',
-          descriptionEn: `${updated.nameEn} catalog entry updated successfully`,
+          descriptionEn: `${updated.nameEn} (${orderedAllImages.length} images) updated in Firestore`,
           descriptionBn: `${updated.nameBn} সফলভাবে আপডেট করা হয়েছে`,
         });
       } else {
@@ -402,11 +529,13 @@ export const AdminERPView: React.FC = () => {
         const saved = await productService.addProduct({
           ...productFormData,
           id: newProdId,
+          image: coverImageUrl,
+          gallery: orderedAllImages,
+          specs: cleanedSpecs,
           price: parsedPrice,
           originalPrice: Number(productFormData.originalPrice) || parsedPrice,
           stockCount: Number(productFormData.stockCount) || 10,
           inStock: (Number(productFormData.stockCount) || 0) > 0,
-          gallery: sanitizedGallery,
         });
 
         // Immediately update React context state so new item appears instantly without refresh
@@ -416,8 +545,8 @@ export const AdminERPView: React.FC = () => {
           type: 'success',
           titleEn: 'New Product Registered',
           titleBn: 'নতুন পণ্য ক্যাটালগে যুক্ত হয়েছে',
-          descriptionEn: `"${saved.nameEn}" successfully added to luxury catalog and available in store`,
-          descriptionBn: `"${saved.nameBn}" সফলভাবে ক্যাটালগে যুক্ত হয়েছে`,
+          descriptionEn: `"${saved.nameEn}" with ${orderedAllImages.length} image(s) saved to Firestore!`,
+          descriptionBn: `"${saved.nameBn}" সফলভাবে ক্যাটালগে যুক্ত হয়েছে!`,
         });
       }
 
@@ -1181,12 +1310,13 @@ export const AdminERPView: React.FC = () => {
                 </select>
 
                 <button
-                  id="admin-add-product-btn"
-                  onClick={handleOpenAddProduct}
-                  className="px-4 py-2.5 rounded-xl bg-[#D4AF37] hover:bg-[#C5A028] text-black font-semibold text-xs sm:text-sm transition-all flex items-center gap-2 shadow-lg shadow-[#D4AF37]/20 cursor-pointer"
+                  id="admin-smart-upload-btn"
+                  type="button"
+                  onClick={() => handleOpenAddProduct(true)}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#E5C158] hover:brightness-110 text-black font-bold text-xs sm:text-sm transition-all flex items-center gap-2 shadow-lg shadow-[#D4AF37]/25 cursor-pointer"
                 >
-                  <Plus className="w-4 h-4" />
-                  Add Luxury Product
+                  <Wand2 className="w-4 h-4" />
+                  <span>{language === 'bn' ? 'স্মার্ট এআই প্রোডাক্ট আপলোড' : 'Smart AI Product Upload'}</span>
                 </button>
               </div>
             </div>
@@ -1195,16 +1325,17 @@ export const AdminERPView: React.FC = () => {
             {filteredProducts.length === 0 ? (
               <div className="p-12 rounded-2xl bg-[#12141A] border border-dashed border-neutral-800 text-center space-y-4">
                 <div className="w-14 h-14 rounded-2xl bg-[#161822] border border-neutral-800 flex items-center justify-center mx-auto text-[#D4AF37]">
-                  <Plus className="w-6 h-6" />
+                  <Wand2 className="w-6 h-6" />
                 </div>
                 <div>
                   <h4 className="text-base font-semibold text-white">No Products Registered Yet</h4>
                   <p className="text-xs text-neutral-400 max-w-md mx-auto mt-1">
-                    Your luxury store is currently clean and fresh. Click below to add your first real product with pricing, stock, warranty, and specifications.
+                    Upload up to 10 product photos at once, paste raw specs for instant AI formatting, and publish directly to Firestore.
                   </p>
                 </div>
                 <button
-                  onClick={handleOpenAddProduct}
+                  type="button"
+                  onClick={() => handleOpenAddProduct(true)}
                   className="px-5 py-2.5 rounded-xl bg-[#D4AF37] hover:bg-[#C5A028] text-black font-semibold text-xs sm:text-sm transition-all inline-flex items-center gap-2 shadow-lg shadow-[#D4AF37]/20 cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
@@ -1758,30 +1889,134 @@ export const AdminERPView: React.FC = () => {
           </div>
         )}
 
-        {/* ----------------- PRODUCT ADD / EDIT MODAL ----------------- */}
+        {/* ----------------- SMART BULK / ADVANCED PRODUCT UPLOAD MODAL ----------------- */}
         {isProductModalOpen && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-            <div className="w-full max-w-3xl bg-[#12141A] border border-[#D4AF37]/30 rounded-2xl shadow-2xl p-6 space-y-4 my-8 animate-scaleUp">
-              <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
-                <div className="flex items-center gap-2">
-                  <Package className="w-5 h-5 text-[#D4AF37]" />
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto">
+            <div className="w-full max-w-4xl bg-[#12141A] border border-[#D4AF37]/30 rounded-2xl shadow-2xl p-5 sm:p-6 space-y-5 my-4 sm:my-8 animate-scaleUp">
+              <div className="flex items-center justify-between border-b border-neutral-800 pb-3.5">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-[#D4AF37]/15 border border-[#D4AF37]/30 flex items-center justify-center text-[#D4AF37]">
+                    <Package className="w-5 h-5" />
+                  </div>
                   <div>
                     <h3 className="text-base font-semibold text-white">
-                      {editingProduct ? 'Edit Catalog Product' : 'Register New Luxury Product'}
+                      {editingProduct
+                        ? (language === 'bn' ? 'পণ্য তথ্য সম্পাদনা করুন' : 'Edit Catalog Product')
+                        : (language === 'bn' ? 'স্মার্ট অ্যাডভান্সড প্রোডাক্ট আপলোড' : 'Smart Bulk & Advanced Product Upload')}
                     </h3>
                     <p className="text-[11px] text-gray-400 font-mono">
-                      ID: {productFormData.id}
+                      ID: {productFormData.id} • Up to 10 Images + AI Auto-Fill
                     </p>
                   </div>
                 </div>
-                <button onClick={() => setIsProductModalOpen(false)} className="text-neutral-400 hover:text-white">
+                <button
+                  type="button"
+                  onClick={() => setIsProductModalOpen(false)}
+                  className="text-neutral-400 hover:text-white p-1.5 cursor-pointer"
+                >
                   <XCircle className="w-5 h-5" />
                 </button>
               </div>
 
               <form onSubmit={handleSaveProduct} className="space-y-5 text-xs">
-                {/* Visual Imagery Upload Engine */}
-                <div className="p-4 rounded-xl bg-[#0E0F14] border border-white/5 space-y-3">
+                {/* 1. AI-Powered Auto-Fill & Spec Formatter Studio */}
+                <div className="rounded-2xl bg-gradient-to-br from-[#171923] via-[#14161F] to-[#11131A] border border-[#D4AF37]/30 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-[#D4AF37]/20 flex flex-wrap items-center justify-between gap-2 bg-[#D4AF37]/5">
+                    <div className="flex items-center gap-2">
+                      <Wand2 className="w-4 h-4 text-[#D4AF37]" />
+                      <span className="font-bold text-white text-xs sm:text-sm">
+                        {language === 'bn'
+                          ? 'এআই অটো-ফিল ও স্পেসিফিকেশন ফরম্যাটার'
+                          : 'AI-Powered Auto-Fill & Formatting Studio'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAiPanel((prev) => !prev)}
+                      className="text-[11px] text-[#D4AF37] hover:underline font-mono cursor-pointer"
+                    >
+                      {showAiPanel
+                        ? (language === 'bn' ? 'সংকুচিত করুন' : 'Collapse')
+                        : (language === 'bn' ? 'এআই প্যানেল খুলুন' : 'Expand AI Assistant')}
+                    </button>
+                  </div>
+
+                  {showAiPanel && (
+                    <div className="p-4 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <label className="text-neutral-300 text-[11px] font-medium">
+                          {language === 'bn'
+                            ? 'যেকোনো পণ্যের কাঁচা নোট, দাম বা স্পেসিফিকেশন এখানে পেস্ট করুন — এআই শিরোনাম, বুলেট পয়েন্ট, বিবরণ ও ক্যাটাগরি সাজিয়ে দেবে:'
+                            : 'Paste raw product notes, supplier specs, pricing, or bullet points — AI will auto-format titles, bullet specs, descriptions, and suggest the category:'}
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setRawProductNotes(
+                              'Sony WH-1000XM5 Wireless ANC Headphones\nPrice: 38500 BDT, MSRP: 45000\nStock: 14 units, Free Delivery\nActive Noise Cancellation: 8 Microphones + Auto NC Optimizer\nBattery Life: 30 Hours with USB-C Fast Charge\nBluetooth: 5.2 Multipoint Connection\nWeight: Ultra-light 250g Soft Fit Leather\nBox Contents: Carry Case, Audio Cable, USB-C Cable'
+                            )
+                          }
+                          className="text-[10px] font-mono text-gray-400 hover:text-[#D4AF37] underline cursor-pointer"
+                        >
+                          {language === 'bn' ? 'স্যাম্পল নোট বসান' : 'Insert Sample Notes'}
+                        </button>
+                      </div>
+
+                      <textarea
+                        rows={4}
+                        value={rawProductNotes}
+                        onChange={(e) => setRawProductNotes(e.target.value)}
+                        placeholder={
+                          language === 'bn'
+                            ? 'যেমন: Apple Watch Ultra 2 Titanium\nPrice: 92000, MSRP: 99000\nDisplay: 49mm 3000 nits Sapphire Crystal\nBattery: Up to 36 hours\nWater Resistance: 100m EN13319...'
+                            : 'e.g. Bang & Olufsen Beosound A1 2nd Gen\nPrice: 32500, MSRP: 37000\nBluetooth 5.1, IP67 Waterproof & Dustproof, 18 Hours Playtime, Built-in Alexa, Free Delivery...'
+                        }
+                        className="w-full px-3.5 py-2.5 bg-[#0C0D12] border border-neutral-700/80 focus:border-[#D4AF37] rounded-xl text-white placeholder-neutral-500 outline-none leading-relaxed font-sans"
+                      />
+
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <span className="text-[10px] text-neutral-400 font-mono">
+                          {language === 'bn'
+                            ? 'স্বয়ংক্রিয়ভাবে Title, Spec Bullets, Description ও Category তৈরি করে'
+                            : 'Auto-fills Title (EN/BN), Spec Bullets, Luxury Description & Category'}
+                        </span>
+
+                        <div className="flex items-center gap-2">
+                          {rawProductNotes && (
+                            <button
+                              type="button"
+                              onClick={() => setRawProductNotes('')}
+                              className="px-3 py-2 rounded-xl bg-[#1A1C24] hover:bg-[#232632] text-neutral-300 text-xs cursor-pointer"
+                            >
+                              {language === 'bn' ? 'মুছুন' : 'Clear'}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            disabled={isFormattingWithAI || !rawProductNotes.trim()}
+                            onClick={handleAIAutoFill}
+                            className="px-4 py-2 rounded-xl bg-[#D4AF37] hover:bg-[#E5C158] disabled:opacity-50 text-black font-bold text-xs flex items-center gap-2 shadow-md shadow-[#D4AF37]/20 cursor-pointer transition-all active:scale-95"
+                          >
+                            {isFormattingWithAI ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
+                                <span>{language === 'bn' ? 'এআই ফরম্যাট করছে...' : 'Formatting with AI...'}</span>
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="w-3.5 h-3.5" />
+                                <span>{language === 'bn' ? 'এআই দিয়ে অটো-ফিল করুন' : 'Auto-Fill & Format with AI'}</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Multi-Image Upload (Up to 10) & Cover Selection Grid */}
+                <div className="p-4 rounded-xl bg-[#0E0F14] border border-white/10 space-y-3">
                   <ProductImageUploader
                     productId={productFormData.id || 'new_prod'}
                     mainImage={productFormData.image || ''}
@@ -1797,6 +2032,7 @@ export const AdminERPView: React.FC = () => {
                   />
                 </div>
 
+                {/* 3. Product Titles & Taglines */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-neutral-400 block mb-1">Product Title (English) *</label>
@@ -1806,7 +2042,7 @@ export const AdminERPView: React.FC = () => {
                       value={productFormData.nameEn || ''}
                       onChange={(e) => setProductFormData({ ...productFormData, nameEn: e.target.value })}
                       placeholder="e.g. Bang & Olufsen Beoplay H95"
-                      className="w-full px-3 py-2 bg-[#161822] border border-neutral-800 rounded-xl text-white focus:outline-none focus:border-[#D4AF37]"
+                      className="w-full px-3 py-2.5 bg-[#161822] border border-neutral-800 rounded-xl text-white focus:outline-none focus:border-[#D4AF37]"
                     />
                   </div>
 
@@ -1818,7 +2054,7 @@ export const AdminERPView: React.FC = () => {
                       value={productFormData.nameBn || ''}
                       onChange={(e) => setProductFormData({ ...productFormData, nameBn: e.target.value })}
                       placeholder="e.g. ব্যাং অ্যান্ড অলুফসেন হেডফোন"
-                      className="w-full px-3 py-2 bg-[#161822] border border-neutral-800 rounded-xl text-white focus:outline-none focus:border-[#D4AF37]"
+                      className="w-full px-3 py-2.5 bg-[#161822] border border-neutral-800 rounded-xl text-white focus:outline-none focus:border-[#D4AF37]"
                     />
                   </div>
                 </div>
@@ -1831,7 +2067,7 @@ export const AdminERPView: React.FC = () => {
                       value={productFormData.taglineEn || ''}
                       onChange={(e) => setProductFormData({ ...productFormData, taglineEn: e.target.value })}
                       placeholder="e.g. Masterpiece Titanium Edition"
-                      className="w-full px-3 py-2 bg-[#161822] border border-neutral-800 rounded-xl text-white focus:outline-none focus:border-[#D4AF37]"
+                      className="w-full px-3 py-2.5 bg-[#161822] border border-neutral-800 rounded-xl text-white focus:outline-none focus:border-[#D4AF37]"
                     />
                   </div>
 
@@ -1842,11 +2078,12 @@ export const AdminERPView: React.FC = () => {
                       value={productFormData.taglineBn || ''}
                       onChange={(e) => setProductFormData({ ...productFormData, taglineBn: e.target.value })}
                       placeholder="e.g. মাস্টারপিস টাইটানিয়াম এডিশন"
-                      className="w-full px-3 py-2 bg-[#161822] border border-neutral-800 rounded-xl text-white focus:outline-none focus:border-[#D4AF37]"
+                      className="w-full px-3 py-2.5 bg-[#161822] border border-neutral-800 rounded-xl text-white focus:outline-none focus:border-[#D4AF37]"
                     />
                   </div>
                 </div>
 
+                {/* 4. Pricing & Inventory */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="text-neutral-400 block mb-1">Price (BDT ৳) *</label>
@@ -1856,7 +2093,7 @@ export const AdminERPView: React.FC = () => {
                       min={100}
                       value={productFormData.price || 0}
                       onChange={(e) => setProductFormData({ ...productFormData, price: Number(e.target.value) })}
-                      className="w-full px-3 py-2 bg-[#161822] border border-neutral-800 rounded-xl text-white font-mono focus:outline-none focus:border-[#D4AF37]"
+                      className="w-full px-3 py-2.5 bg-[#161822] border border-neutral-800 rounded-xl text-white font-mono focus:outline-none focus:border-[#D4AF37]"
                     />
                   </div>
 
@@ -1866,7 +2103,7 @@ export const AdminERPView: React.FC = () => {
                       type="number"
                       value={productFormData.originalPrice || 0}
                       onChange={(e) => setProductFormData({ ...productFormData, originalPrice: Number(e.target.value) })}
-                      className="w-full px-3 py-2 bg-[#161822] border border-neutral-800 rounded-xl text-white font-mono focus:outline-none focus:border-[#D4AF37]"
+                      className="w-full px-3 py-2.5 bg-[#161822] border border-neutral-800 rounded-xl text-white font-mono focus:outline-none focus:border-[#D4AF37]"
                     />
                   </div>
 
@@ -1878,18 +2115,26 @@ export const AdminERPView: React.FC = () => {
                       min={0}
                       value={productFormData.stockCount || 0}
                       onChange={(e) => setProductFormData({ ...productFormData, stockCount: Number(e.target.value) })}
-                      className="w-full px-3 py-2 bg-[#161822] border border-neutral-800 rounded-xl text-white font-mono focus:outline-none focus:border-[#D4AF37]"
+                      className="w-full px-3 py-2.5 bg-[#161822] border border-neutral-800 rounded-xl text-white font-mono focus:outline-none focus:border-[#D4AF37]"
                     />
                   </div>
                 </div>
 
+                {/* 5. Category (with AI Suggestion badge) & Brand */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-neutral-400 block mb-1">Category *</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-neutral-400">Category *</label>
+                      {aiSuggestedCategorySlug && aiSuggestedCategorySlug === productFormData.category && (
+                        <span className="text-[10px] font-mono text-[#D4AF37] bg-[#D4AF37]/10 border border-[#D4AF37]/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <Sparkles className="w-2.5 h-2.5" /> AI Suggested
+                        </span>
+                      )}
+                    </div>
                     <select
                       value={productFormData.category || categories?.[0]?.slug || 'gadgets'}
                       onChange={(e) => setProductFormData({ ...productFormData, category: e.target.value as ProductCategory })}
-                      className="w-full px-3 py-2 bg-[#161822] border border-neutral-800 rounded-xl text-white focus:outline-none focus:border-[#D4AF37]"
+                      className="w-full px-3 py-2.5 bg-[#161822] border border-neutral-800 rounded-xl text-white focus:outline-none focus:border-[#D4AF37]"
                     >
                       {categories.map((cat) => (
                         <option key={cat.id} value={cat.slug}>
@@ -1910,16 +2155,76 @@ export const AdminERPView: React.FC = () => {
                       value={productFormData.brand || ''}
                       onChange={(e) => setProductFormData({ ...productFormData, brand: e.target.value })}
                       placeholder="e.g. Bang & Olufsen, Apple, Devialet"
-                      className="w-full px-3 py-2 bg-[#161822] border border-neutral-800 rounded-xl text-white focus:outline-none focus:border-[#D4AF37]"
+                      className="w-full px-3 py-2.5 bg-[#161822] border border-neutral-800 rounded-xl text-white focus:outline-none focus:border-[#D4AF37]"
                     />
                   </div>
                 </div>
 
-                {/* Detailed Product Description & Specifications (Multi-line Textarea) */}
+                {/* 6. Parsed Specification Bullet Points Editor */}
+                <div className="p-4 rounded-xl bg-[#0E0F14] border border-white/10 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <ListChecks className="w-4 h-4 text-[#D4AF37]" />
+                      <span className="font-semibold text-neutral-200">
+                        {language === 'bn' ? 'স্পেসিফিকেশন বুলেট পয়েন্ট' : 'Specification Bullet Points'}
+                      </span>
+                      <span className="text-[10px] font-mono text-gray-500">
+                        ({(productFormData.specs || []).length})
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddSpecRow}
+                      className="px-2.5 py-1 rounded-lg bg-[#D4AF37]/15 hover:bg-[#D4AF37]/25 border border-[#D4AF37]/30 text-[#D4AF37] text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>{language === 'bn' ? 'স্পেক যোগ' : 'Add Spec Bullet'}</span>
+                    </button>
+                  </div>
+
+                  {(productFormData.specs || []).length === 0 ? (
+                    <p className="text-[11px] text-neutral-500">
+                      {language === 'bn'
+                        ? 'উপরে এআই অটো-ফিল ব্যবহার করুন অথবা "+ স্পেক যোগ" ক্লিক করে বুলেট পয়েন্ট লিখুন।'
+                        : 'Use AI Auto-Fill above to parse raw notes into bullet specs, or click "+ Add Spec Bullet" manually.'}
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                      {(productFormData.specs || []).map((spec, idx) => (
+                        <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-[#161822] p-2 rounded-xl border border-neutral-800">
+                          <input
+                            type="text"
+                            value={spec.labelEn}
+                            onChange={(e) => handleUpdateSpecRow(idx, 'labelEn', e.target.value)}
+                            placeholder="Spec Name (e.g. Battery)"
+                            className="sm:col-span-4 px-2.5 py-1.5 bg-[#0C0D12] border border-neutral-800 rounded-lg text-white text-xs focus:outline-none focus:border-[#D4AF37]"
+                          />
+                          <input
+                            type="text"
+                            value={spec.valueEn}
+                            onChange={(e) => handleUpdateSpecRow(idx, 'valueEn', e.target.value)}
+                            placeholder="Value (e.g. 30 Hours ANC)"
+                            className="sm:col-span-7 px-2.5 py-1.5 bg-[#0C0D12] border border-neutral-800 rounded-lg text-white text-xs focus:outline-none focus:border-[#D4AF37]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSpecRow(idx)}
+                            className="sm:col-span-1 p-1.5 rounded-lg text-neutral-400 hover:text-rose-400 hover:bg-rose-500/10 flex items-center justify-center cursor-pointer"
+                            title="Remove Spec"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 7. Detailed Product Description (English & Bengali) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-neutral-300 font-semibold block mb-1">
-                      Detailed Product Description & Specifications (English)
+                      Detailed Product Description (English)
                     </label>
                     <textarea
                       rows={5}
@@ -1967,7 +2272,7 @@ export const AdminERPView: React.FC = () => {
                       value={productFormData.warrantyEn || (productFormData as any).warranty || ''}
                       onChange={(e) => setProductFormData({ ...productFormData, warrantyEn: e.target.value })}
                       placeholder="e.g. 2 Years Official Luxora Warranty"
-                      className="w-full px-3 py-2 bg-[#161822] border border-neutral-800 rounded-xl text-white focus:outline-none focus:border-[#D4AF37]"
+                      className="w-full px-3 py-2.5 bg-[#161822] border border-neutral-800 rounded-xl text-white focus:outline-none focus:border-[#D4AF37]"
                     />
                   </div>
 
@@ -1976,7 +2281,7 @@ export const AdminERPView: React.FC = () => {
                     <select
                       value={productFormData.badge || 'new'}
                       onChange={(e) => setProductFormData({ ...productFormData, badge: e.target.value as any })}
-                      className="w-full px-3 py-2 bg-[#161822] border border-neutral-800 rounded-xl text-white focus:outline-none focus:border-[#D4AF37]"
+                      className="w-full px-3 py-2.5 bg-[#161822] border border-neutral-800 rounded-xl text-white focus:outline-none focus:border-[#D4AF37]"
                     >
                       <option value="new">New Arrival</option>
                       <option value="bestseller">Bestseller</option>
@@ -1990,7 +2295,7 @@ export const AdminERPView: React.FC = () => {
                     type="button"
                     disabled={isSavingProduct}
                     onClick={() => setIsProductModalOpen(false)}
-                    className="px-4 py-2 rounded-xl text-neutral-400 hover:text-white cursor-pointer disabled:opacity-50"
+                    className="px-4 py-2.5 rounded-xl text-neutral-400 hover:text-white cursor-pointer disabled:opacity-50"
                   >
                     Cancel
                   </button>
@@ -2002,12 +2307,12 @@ export const AdminERPView: React.FC = () => {
                     {isSavingProduct ? (
                       <>
                         <RefreshCw className="w-4 h-4 animate-spin text-black" />
-                        <span>Saving to Cloud Catalog...</span>
+                        <span>Saving to Firestore...</span>
                       </>
                     ) : (
                       <>
                         <Check className="w-4 h-4" />
-                        <span>Save Product to Catalog</span>
+                        <span>{editingProduct ? 'Update Product' : 'Save Product'}</span>
                       </>
                     )}
                   </button>

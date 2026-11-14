@@ -1,4 +1,23 @@
-import { Language } from '../types';
+import { Language, CategoryItem, ProductSpec } from '../types';
+
+export interface FormattedProductSuggestion {
+  nameEn: string;
+  nameBn: string;
+  taglineEn: string;
+  taglineBn: string;
+  brand: string;
+  suggestedCategory: string;
+  descriptionEn: string;
+  descriptionBn: string;
+  specs: ProductSpec[];
+  suggestedPrice: number;
+  suggestedOriginalPrice: number;
+  suggestedStockCount: number;
+  freeDelivery: boolean;
+  warrantyEn: string;
+  suggestedBadge: 'new' | 'bestseller' | 'limited';
+  provider: string;
+}
 
 export interface ChatMessage {
   id: string;
@@ -187,4 +206,98 @@ You will immediately receive your unique Order ID (e.g., **LUX-892014**).`;
   return `Welcome to **Luxora BD AI Concierge**.
 
 How may I assist you today? You can inquire about our premium curated tech products, nationwide shipping fees, bKash/Nagad payment verification, or official brand warranties.`;
+}
+
+/**
+ * AI-Powered Product Auto-Fill & Spec Formatter
+ * Calls server-side Gemini 4 Hydrogen proxy (/api/ai/format-product)
+ */
+export async function formatProductNotesWithAI(
+  rawNotes: string,
+  categories: CategoryItem[],
+  language: Language = 'en'
+): Promise<FormattedProductSuggestion> {
+  const cleanNotes = rawNotes.trim();
+  if (!cleanNotes) {
+    throw new Error(
+      language === 'bn'
+        ? 'দয়া করে প্রথমে পণ্যের নোট বা স্পেসিফিকেশন পেস্ট করুন।'
+        : 'Please paste raw product notes or specifications first.'
+    );
+  }
+
+  const categoryPayload = categories.map((c) => ({
+    slug: c.slug,
+    nameEn: c.nameEn,
+    nameBn: c.nameBn,
+  }));
+
+  const response = await fetch('/api/ai/format-product', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      rawNotes: cleanNotes,
+      categories: categoryPayload,
+      language,
+    }),
+  });
+
+  if (!response.ok) {
+    let errText = `Server returned status ${response.status}`;
+    try {
+      const errJson = await response.json();
+      if (errJson?.error) errText = errJson.error;
+    } catch {
+      // ignore json parse failure
+    }
+    throw new Error(errText);
+  }
+
+  const result = await response.json();
+  const data = result?.data;
+  if (!data) {
+    throw new Error('Invalid response from AI formatter endpoint.');
+  }
+
+  // Ensure suggestedCategory matches an active category slug if present
+  const validSlugs = new Set(categories.map((c) => c.slug));
+  const rawSlug = String(data.suggestedCategory || '').trim();
+  const resolvedCategory =
+    validSlugs.has(rawSlug) || categories.length === 0
+      ? rawSlug || 'gadgets'
+      : categories[0].slug;
+
+  const specs: ProductSpec[] = Array.isArray(data.specs)
+    ? data.specs
+        .filter((s: any) => s && (s.labelEn || s.valueEn))
+        .map((s: any) => ({
+          labelEn: String(s.labelEn || 'Feature').trim(),
+          labelBn: String(s.labelBn || s.labelEn || 'বৈশিষ্ট্য').trim(),
+          valueEn: String(s.valueEn || '').trim(),
+          valueBn: String(s.valueBn || s.valueEn || '').trim(),
+        }))
+    : [];
+
+  const rawBadge = String(data.suggestedBadge || 'new').toLowerCase();
+  const suggestedBadge: 'new' | 'bestseller' | 'limited' =
+    rawBadge === 'bestseller' || rawBadge === 'limited' ? rawBadge : 'new';
+
+  return {
+    nameEn: String(data.nameEn || '').trim(),
+    nameBn: String(data.nameBn || data.nameEn || '').trim(),
+    taglineEn: String(data.taglineEn || '').trim(),
+    taglineBn: String(data.taglineBn || data.taglineEn || '').trim(),
+    brand: String(data.brand || 'Luxora Prime').trim(),
+    suggestedCategory: resolvedCategory,
+    descriptionEn: String(data.descriptionEn || '').trim(),
+    descriptionBn: String(data.descriptionBn || '').trim(),
+    specs,
+    suggestedPrice: Math.max(0, Number(data.suggestedPrice) || 0),
+    suggestedOriginalPrice: Math.max(0, Number(data.suggestedOriginalPrice) || 0),
+    suggestedStockCount: Math.max(0, Math.floor(Number(data.suggestedStockCount) || 0)),
+    freeDelivery: Boolean(data.freeDelivery),
+    warrantyEn: String(data.warrantyEn || '').trim(),
+    suggestedBadge,
+    provider: String(result?.provider || 'gemini-4-hydrogen'),
+  };
 }
