@@ -18,13 +18,152 @@ import { mockProducts } from '../data/mockProducts';
 export const PRODUCTS_COLLECTION = 'products';
 const CACHED_PRODUCTS_STORAGE_KEY = 'luxora_cached_products';
 
+// Per-visit in-memory random rank map: generates a fresh order on every page load/refresh
+// while keeping positions stable during in-page filtering, searching, and modal interactions.
+const visitRandomRankMap = new Map<string, number>();
+
+function generateUniformRandom(): number {
+  try {
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+      const buf = new Uint32Array(1);
+      crypto.getRandomValues(buf);
+      return buf[0] / 4294967296;
+    }
+  } catch {
+    // fallback to Math.random
+  }
+  return Math.random();
+}
+
+/**
+ * Determine whether a product is unavailable / out of stock.
+ */
+export function isProductOutOfStock(product: Partial<Product> | null | undefined): boolean {
+  if (!product) return true;
+  const stock = typeof product.stockCount === 'number' ? product.stockCount : Number(product.stockCount ?? 0);
+  return product.inStock === false || !Number.isFinite(stock) || stock <= 0;
+}
+
+/**
+ * Retrieve (or lazily assign) a random discovery rank for this browser visit.
+ */
+export function getVisitRandomRank(productId: string): number {
+  const key = String(productId || '');
+  let rank = visitRandomRankMap.get(key);
+  if (rank === undefined) {
+    rank = generateUniformRandom();
+    visitRandomRankMap.set(key, rank);
+  }
+  return rank;
+}
+
+/**
+ * Clear visit ranks and assign fresh Fisher-Yates randomized ranks for all provided IDs.
+ */
+export function reshuffleVisitCatalogOrder(productIds?: string[]): void {
+  visitRandomRankMap.clear();
+  if (Array.isArray(productIds) && productIds.length > 0) {
+    const shuffled = [...productIds];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(generateUniformRandom() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    const len = shuffled.length;
+    shuffled.forEach((id, idx) => {
+      visitRandomRankMap.set(String(id), (idx + generateUniformRandom()) / len);
+    });
+  }
+}
+
+/**
+ * Fair-visibility storefront sorter:
+ * 1. Always pushes out-of-stock items (stock <= 0 or !inStock) to the very bottom.
+ * 2. Gives older and newer in-stock products equal randomized visibility on each visit/refresh.
+ */
+export function sortProductsForCatalogDisplay(items: Product[]): Product[] {
+  if (!Array.isArray(items) || items.length === 0) return [];
+
+  // Seed unseen IDs using unbiased Fisher-Yates batch assignment when initializing
+  const unseenIds = items
+    .map((p) => String(p.id || ''))
+    .filter((id) => id && !visitRandomRankMap.has(id));
+
+  if (unseenIds.length > 1 && visitRandomRankMap.size === 0) {
+    reshuffleVisitCatalogOrder(unseenIds);
+  } else {
+    for (const id of unseenIds) {
+      getVisitRandomRank(id);
+    }
+  }
+
+  return [...items].sort((a, b) => {
+    const aOut = isProductOutOfStock(a) ? 1 : 0;
+    const bOut = isProductOutOfStock(b) ? 1 : 0;
+    if (aOut !== bOut) return aOut - bOut;
+    return getVisitRandomRank(a.id) - getVisitRandomRank(b.id);
+  });
+}
+
+/**
+ * Generate a realistic, randomized product rating (4.3 - 5.0, rounded to 1 decimal place)
+ * and review count (6 - 48) that form a unique combination across the catalog.
+ */
+export function generateRandomizedRatingMetrics(
+  existingProducts?: Array<Pick<Product, 'rating' | 'reviewsCount'>>
+): { rating: number; reviewsCount: number } {
+  const source = Array.isArray(existingProducts) ? existingProducts : [];
+  const usedPairs = new Set<string>(
+    source
+      .filter((p) => typeof p?.rating === 'number' && typeof p?.reviewsCount === 'number')
+      .map((p) => `${Number(p.rating).toFixed(1)}|${Math.round(Number(p.reviewsCount))}`)
+  );
+
+  const pickRandomPair = () => {
+    const ratingTenths = 43 + Math.floor(generateUniformRandom() * 8); // 43..50 -> 4.3..5.0
+    const rating = Number((ratingTenths / 10).toFixed(1));
+    const reviewsCount = 6 + Math.floor(generateUniformRandom() * 43); // 6..48
+    return { rating, reviewsCount };
+  };
+
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const candidate = pickRandomPair();
+    const key = `${candidate.rating.toFixed(1)}|${candidate.reviewsCount}`;
+    if (!usedPairs.has(key)) {
+      return candidate;
+    }
+  }
+
+  // Fallback sweep across all 344 (rating, reviewsCount) combinations if catalog is very large
+  const ratings = [4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 5.0];
+  for (let i = ratings.length - 1; i > 0; i--) {
+    const j = Math.floor(generateUniformRandom() * (i + 1));
+    [ratings[i], ratings[j]] = [ratings[j], ratings[i]];
+  }
+  const offset = Math.floor(generateUniformRandom() * 43);
+  for (const rating of ratings) {
+    for (let step = 0; step < 43; step++) {
+      const reviewsCount = 6 + ((offset + step) % 43);
+      const key = `${rating.toFixed(1)}|${reviewsCount}`;
+      if (!usedPairs.has(key)) {
+        return { rating, reviewsCount };
+      }
+    }
+  }
+
+  return pickRandomPair();
+}
+
 /**
  * Clean & sanitize a Product payload to guarantee:
  * 1. Zero `undefined` values (which causes Firestore setDoc to fail)
  * 2. All required fields from blueprint and UI are populated
  * 3. Consistent data types (numbers, booleans, strings, arrays)
  */
-export function sanitizeProductData(input: Partial<Product>, fallbackId?: string): Product {
+export function sanitizeProductData(
+  input: Partial<Product>,
+  fallbackId?: string,
+  existingProducts?: Array<Pick<Product, 'rating' | 'reviewsCount'>>
+): Product {
   const now = new Date().toISOString();
   const rawId = input.id || fallbackId || `lux-prod-${Date.now().toString(36)}`;
   // Ensure ID complies with Firestore rules: ^[a-zA-Z0-9_.@\-]+$
@@ -33,6 +172,19 @@ export function sanitizeProductData(input: Partial<Product>, fallbackId?: string
   const priceNum = Math.max(0, Number(input.price) || 0);
   const origPriceNum = Math.max(priceNum, Number(input.originalPrice) || priceNum);
   const stockNum = Math.max(0, Math.floor(Number(input.stockCount) ?? 10));
+
+  const hasValidRating = typeof input.rating === 'number' && Number.isFinite(input.rating) && input.rating > 0 && input.rating <= 5;
+  const hasValidReviews = typeof input.reviewsCount === 'number' && Number.isFinite(input.reviewsCount) && input.reviewsCount > 0;
+  const generatedMetrics = (!hasValidRating || !hasValidReviews)
+    ? generateRandomizedRatingMetrics(existingProducts)
+    : null;
+
+  const finalRating = hasValidRating
+    ? Number(Number(input.rating).toFixed(1))
+    : generatedMetrics!.rating;
+  const finalReviewsCount = hasValidReviews
+    ? Math.max(1, Math.round(Number(input.reviewsCount)))
+    : generatedMetrics!.reviewsCount;
 
   const specsList: ProductSpec[] = Array.isArray(input.specs) 
     ? input.specs.map((s) => ({
@@ -57,8 +209,8 @@ export function sanitizeProductData(input: Partial<Product>, fallbackId?: string
     freeDelivery: Boolean(input.freeDelivery || input.category === 'free-delivery'),
     price: priceNum,
     originalPrice: origPriceNum,
-    rating: Number(input.rating) || 4.9,
-    reviewsCount: Math.max(1, Number(input.reviewsCount) || 12),
+    rating: finalRating,
+    reviewsCount: finalReviewsCount,
     inStock: stockNum > 0,
     stockCount: stockNum,
     image: (input.image || '').trim(),
@@ -130,10 +282,10 @@ export function subscribeToProducts(
           items.push({ ...data, id: data?.id || docSnap.id });
         });
 
-        // Always update with live cloud items
+        // Always update with live cloud items (dynamically shuffled per visit, stock-out at bottom)
         if (items.length > 0) {
           setLocalCachedProducts(items);
-          onUpdate(items);
+          onUpdate(sortProductsForCatalogDisplay(items));
         } else {
           // If primary collection is empty, check alias collection
           getDocs(collection(db, 'luxora-products'))
@@ -145,7 +297,7 @@ export function subscribeToProducts(
                   altItems.push({ ...data, id: data?.id || d.id });
                 });
                 setLocalCachedProducts(altItems);
-                onUpdate(altItems);
+                onUpdate(sortProductsForCatalogDisplay(altItems));
               } else {
                 // Cloud catalog is genuinely empty (all products deleted) -> clear cache & show empty
                 setLocalCachedProducts([]);
@@ -154,7 +306,7 @@ export function subscribeToProducts(
             })
             .catch(() => {
               const cached = getLocalCachedProducts();
-              onUpdate(cached);
+              onUpdate(sortProductsForCatalogDisplay(cached));
             });
         }
       },
@@ -162,7 +314,7 @@ export function subscribeToProducts(
         console.warn('Real-time products subscription warning:', error);
         if (onError) onError(error);
         const cached = getLocalCachedProducts();
-        onUpdate(cached);
+        onUpdate(sortProductsForCatalogDisplay(cached));
       }
     );
   } catch (err: any) {
@@ -192,13 +344,13 @@ export async function getProducts(): Promise<Product[]> {
             altItems.push({ ...data, id: data?.id || docSnap.id });
           });
           setLocalCachedProducts(altItems);
-          return altItems;
+          return sortProductsForCatalogDisplay(altItems);
         }
         // Both cloud collections are empty -> clear local cache
         setLocalCachedProducts([]);
         return [];
       } catch {
-        return getLocalCachedProducts();
+        return sortProductsForCatalogDisplay(getLocalCachedProducts());
       }
     }
     
@@ -209,10 +361,10 @@ export async function getProducts(): Promise<Product[]> {
     });
 
     setLocalCachedProducts(items);
-    return items;
+    return sortProductsForCatalogDisplay(items);
   } catch (error: any) {
     console.warn('Catalog fetch warning, falling back to cache:', error);
-    return getLocalCachedProducts();
+    return sortProductsForCatalogDisplay(getLocalCachedProducts());
   }
 }
 
@@ -225,7 +377,20 @@ export async function getProductById(id: string): Promise<Product | null> {
     const docRef = doc(db, PRODUCTS_COLLECTION, cleanId);
     const snap = await getDoc(docRef);
     if (snap.exists()) {
-      return snap.data() as Product;
+      const data = snap.data() as Product;
+      return { ...data, id: data?.id || snap.id };
+    }
+
+    // Check alias collection 'luxora-products'
+    try {
+      const aliasRef = doc(db, 'luxora-products', cleanId);
+      const aliasSnap = await getDoc(aliasRef);
+      if (aliasSnap.exists()) {
+        const data = aliasSnap.data() as Product;
+        return { ...data, id: data?.id || aliasSnap.id };
+      }
+    } catch {
+      // ignore alias lookup errors
     }
 
     // Check local cache
@@ -252,18 +417,18 @@ export async function getProductsByCategory(category: ProductCategory): Promise<
     
     if (snap.empty) {
       const cached = getLocalCachedProducts();
-      return cached.filter((p) => p.category === category);
+      return sortProductsForCatalogDisplay(cached.filter((p) => p.category === category));
     }
     
     const items: Product[] = [];
     snap.forEach((docSnap) => {
       items.push(docSnap.data() as Product);
     });
-    return items;
+    return sortProductsForCatalogDisplay(items);
   } catch (error) {
     console.warn('Category fetch error, using cache:', error);
     const cached = getLocalCachedProducts();
-    return cached.filter((p) => p.category === category);
+    return sortProductsForCatalogDisplay(cached.filter((p) => p.category === category));
   }
 }
 
@@ -296,7 +461,8 @@ export async function clearAllProducts(): Promise<void> {
  * and updates local cache immediately.
  */
 export async function addProduct(productData: Partial<Product>): Promise<Product> {
-  const cleanProduct = sanitizeProductData(productData);
+  const existingCatalog = getLocalCachedProducts();
+  const cleanProduct = sanitizeProductData(productData, undefined, existingCatalog);
 
   // Validate essential fields before database write
   if (!cleanProduct.nameEn) {
@@ -500,7 +666,12 @@ export const productService = {
   updateProductStock,
   deleteProduct,
   sanitizeProductData,
+  generateRandomizedRatingMetrics,
   getLocalCachedProducts,
   setLocalCachedProducts,
+  isProductOutOfStock,
+  getVisitRandomRank,
+  reshuffleVisitCatalogOrder,
+  sortProductsForCatalogDisplay,
 };
 

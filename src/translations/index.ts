@@ -90,7 +90,7 @@ export const translations = {
     buyNow: "Buy Now",
     quickView: "Quick View",
     inStock: "In Stock",
-    outOfStock: "Sold Out",
+    outOfStock: "Stock Out",
     onlyFewLeft: "Only {count} units remaining",
     officialWarranty: "Official Warranty",
     productDetails: "Product Specifications",

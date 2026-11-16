@@ -127,24 +127,6 @@ export const adminRbacService = {
         }
       }
 
-      // 3. Fallback: Query collection by email field
-      if (cleanEmail) {
-        const q = query(collection(db, 'admins'), where('email', '==', cleanEmail));
-        const querySnap = await getDocs(q);
-        if (!querySnap.empty) {
-          const firstDoc = querySnap.docs[0];
-          const data = firstDoc.data() as AuthorizedAdmin;
-          if (data.active !== false) {
-            return {
-              isAuthorized: true,
-              isSuperAdmin: data.role === 'super_admin',
-              role: data.role || 'staff',
-              adminInfo: { id: firstDoc.id, ...data },
-            };
-          }
-        }
-      }
-
       return { isAuthorized: false, isSuperAdmin: false, role: 'none' };
     } catch (error) {
       console.warn('Failed to verify admin status against Firestore:', error);

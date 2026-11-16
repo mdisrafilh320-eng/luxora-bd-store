@@ -410,6 +410,7 @@ export async function logoutUser(): Promise<void> {
   try {
     localStorage.removeItem('luxora_user');
     localStorage.removeItem('luxora_guest_session');
+    localStorage.removeItem('luxora_cached_orders');
   } catch {
     // ignore
   }

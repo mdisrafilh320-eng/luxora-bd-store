@@ -16,33 +16,43 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { orderService } from '../../services/orderService';
+import { subscribeToUserOrders } from '../../services/orderService';
 import { Order } from '../../types';
 import { formatBDT } from '../../translations';
+import { OrderTrackingTimeline } from '../tracking/OrderTrackingTimeline';
 
 export const AccountView: React.FC = () => {
-  const { currentUser, userProfile, logout, setActiveView, language, t, addToast, setIsAuthModalOpen } = useApp();
+  const { currentUser, userProfile, logout, setActiveView, setTrackingOrderId, language, t, addToast, setIsAuthModalOpen } = useApp();
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(true);
+  const [expandedTrackingOrderId, setExpandedTrackingOrderId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'orders' | 'profile' | 'addresses'>('orders');
 
   useEffect(() => {
-    if (!currentUser) return;
-    const fetchOrders = async () => {
-      setIsLoadingOrders(true);
-      try {
-        const userOrders = await orderService.getUserOrders(currentUser.id);
+    if (!currentUser || currentUser.isGuest) {
+      setOrders([]);
+      setIsLoadingOrders(false);
+      return;
+    }
+
+    setIsLoadingOrders(true);
+    const unsubscribe = subscribeToUserOrders(
+      (userOrders) => {
         setOrders(userOrders);
-      } catch (err) {
-        console.error('Failed to load user orders:', err);
-      } finally {
+        setIsLoadingOrders(false);
+      },
+      (err) => {
+        console.error('Failed to subscribe to user orders:', err);
         setIsLoadingOrders(false);
       }
-    };
-    fetchOrders();
-  }, [currentUser]);
+    );
 
-  if (!currentUser) {
+    return () => {
+      unsubscribe();
+    };
+  }, [currentUser?.id, currentUser?.isGuest]);
+
+  if (!currentUser || currentUser.isGuest) {
     return (
       <div className="w-full max-w-4xl mx-auto px-4 py-20 text-center">
         <div className="card-bg border border-[#1E1E24] rounded-3xl p-8 sm:p-12 max-w-md mx-auto shadow-2xl">
@@ -241,16 +251,43 @@ export const AccountView: React.FC = () => {
                   {/* Progress tracker & Actions */}
                   <div className="pt-4 border-t border-[#1E1E24] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-[11px] text-gray-400">
                     <div className="flex items-center gap-2 text-emerald-400 font-medium">
-                      <Truck className="w-4 h-4" />
-                      <span>{language === 'bn' ? `ডেলিভারি স্ট্যাটাস: ${order.orderStatus}` : `Status: ${order.orderStatus} & Live Tracking Enabled`}</span>
-                    </div>
-                    
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono text-[10px] text-gray-500 hidden sm:inline">
-                        {order.customer?.name} ({order.customer?.phone})
+                      <Truck className="w-4 h-4 shrink-0" />
+                      <span>
+                        {language === 'bn'
+                          ? `লাইভ স্ট্যাটাস: ${order.orderStatus}`
+                          : `Live Status: ${order.orderStatus}`}
+                        {order.trackingInfo?.consignmentId ? ` • ${order.trackingInfo.consignmentId}` : ''}
                       </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
                       <button
-                        onClick={() => setActiveView('track')}
+                        type="button"
+                        onClick={() =>
+                          setExpandedTrackingOrderId(
+                            expandedTrackingOrderId === order.id ? null : order.id
+                          )
+                        }
+                        className="px-3 py-1.5 rounded-lg bg-[#161822] border border-[#262836] text-gray-200 hover:border-[#D4AF37]/50 hover:text-[#D4AF37] font-semibold text-[10px] uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>
+                          {expandedTrackingOrderId === order.id
+                            ? language === 'bn'
+                              ? 'টাইমলাইন লুকান'
+                              : 'Hide Timeline'
+                            : language === 'bn'
+                            ? 'লাইভ স্ট্যাটাস দেখুন'
+                            : 'Live Timeline'}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTrackingOrderId(order.id);
+                          setActiveView('track');
+                        }}
                         className="px-3 py-1.5 rounded-lg gold-bg text-black font-bold text-[10px] uppercase tracking-wider hover:brightness-110 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
                       >
                         <Truck className="w-3.5 h-3.5" />
@@ -258,6 +295,20 @@ export const AccountView: React.FC = () => {
                       </button>
                     </div>
                   </div>
+
+                  {expandedTrackingOrderId === order.id && (
+                    <div className="mt-4 pt-4 border-t border-[#1E1E24]">
+                      <div className="flex items-center justify-between mb-3 text-[11px]">
+                        <span className="font-mono uppercase tracking-wider text-[#D4AF37]">
+                          {order.trackingInfo?.courier || 'Steadfast Luxury Express'}
+                        </span>
+                        <span className="text-emerald-400">
+                          {order.trackingInfo?.estimatedDelivery || '24-48 Hours Express'}
+                        </span>
+                      </div>
+                      <OrderTrackingTimeline order={order} language={language} />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

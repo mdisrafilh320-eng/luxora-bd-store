@@ -9,13 +9,15 @@ import {
   ArrowUpDown,
   Sparkles,
   Truck,
+  Shuffle,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { CategoryItem } from '../../types';
 import { formatBDT } from '../../translations';
+import { isProductOutOfStock, getVisitRandomRank } from '../../services/productService';
 import { ProductCard } from './ProductCard';
 
-type SortOption = 'featured' | 'price-asc' | 'price-desc' | 'rating' | 'reviews';
+type SortOption = 'discovery' | 'featured' | 'price-asc' | 'price-desc' | 'rating' | 'reviews';
 
 export const CatalogHub: React.FC = () => {
   const {
@@ -29,13 +31,15 @@ export const CatalogHub: React.FC = () => {
     setSearchQuery,
     isAdmin,
     setActiveView,
+    reshuffleCatalog,
   } = useApp();
 
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   const [inStockOnly, setInStockOnly] = useState(false);
   const [maxPrice, setMaxPrice] = useState<number>(200000);
   const [selectedBrand, setSelectedBrand] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<SortOption>('featured');
+  const [sortBy, setSortBy] = useState<SortOption>('discovery');
+  const [shuffleNonce, setShuffleNonce] = useState(0);
 
   // Build horizontal filter strip: Always includes All & Free Delivery + dynamic admin categories
   const filterCategories = useMemo(() => {
@@ -87,7 +91,13 @@ export const CatalogHub: React.FC = () => {
     setInStockOnly(false);
     setMaxPrice(200000);
     setSearchQuery('');
-    setSortBy('featured');
+    setSortBy('discovery');
+  };
+
+  const handleShuffleMix = () => {
+    reshuffleCatalog();
+    setSortBy('discovery');
+    setShuffleNonce((n) => n + 1);
   };
 
   // Lookup map so searching by a category's English or Bengali display name also matches products in that category
@@ -152,11 +162,22 @@ export const CatalogHub: React.FC = () => {
     });
 
     return result.sort((a, b) => {
+      // Smart Stock-Out Handling: always push out-of-stock products to the bottom of the grid
+      const aOut = isProductOutOfStock(a) ? 1 : 0;
+      const bOut = isProductOutOfStock(b) ? 1 : 0;
+      if (aOut !== bOut) return aOut - bOut;
+
       if (sortBy === 'price-asc') return (a.price ?? 0) - (b.price ?? 0);
       if (sortBy === 'price-desc') return (b.price ?? 0) - (a.price ?? 0);
       if (sortBy === 'rating') return (b.rating ?? 0) - (a.rating ?? 0);
       if (sortBy === 'reviews') return (b.reviewsCount ?? 0) - (a.reviewsCount ?? 0);
-      return (b.isFeatured ? 1 : 0) - (a.isFeatured ? 1 : 0);
+      if (sortBy === 'featured') {
+        const featDiff = (b.isFeatured ? 1 : 0) - (a.isFeatured ? 1 : 0);
+        if (featDiff !== 0) return featDiff;
+      }
+
+      // Default 'discovery' mix (and tie-breaker): dynamic per-visit random rank for fair visibility
+      return getVisitRandomRank(a.id) - getVisitRandomRank(b.id);
     });
   }, [
     products,
@@ -168,6 +189,7 @@ export const CatalogHub: React.FC = () => {
     maxPrice,
     searchQuery,
     sortBy,
+    shuffleNonce,
   ]);
 
   return (
@@ -209,6 +231,19 @@ export const CatalogHub: React.FC = () => {
           )}
 
           <div className="flex items-center gap-2 sm:gap-2.5 flex-1 sm:flex-initial">
+            <button
+              type="button"
+              onClick={handleShuffleMix}
+              title={language === 'bn' ? 'নতুন পণ্যের মিক্স দেখুন' : 'Shuffle catalog mix'}
+              aria-label={language === 'bn' ? 'নতুন পণ্যের মিক্স দেখুন' : 'Shuffle catalog mix'}
+              className="min-h-[44px] px-3 py-2.5 rounded-xl bg-[#111217] border border-[#22232D] hover:border-[#D4AF37]/50 text-neutral-300 hover:text-[#D4AF37] text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 active:scale-95"
+            >
+              <Shuffle className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">
+                {language === 'bn' ? 'শাফল' : 'Shuffle'}
+              </span>
+            </button>
+
             <div className="relative flex-1 sm:flex-initial">
               <select
                 value={sortBy}
@@ -216,6 +251,7 @@ export const CatalogHub: React.FC = () => {
                 aria-label="Sort products"
                 className="w-full sm:w-auto min-h-[44px] appearance-none bg-[#111217] border border-[#22232D] text-neutral-200 hover:border-white/20 rounded-xl pl-3.5 pr-9 py-2.5 text-sm sm:text-xs font-medium focus:outline-none focus:border-[#D4AF37] cursor-pointer"
               >
+                <option value="discovery">{language === 'bn' ? 'ফ্রেশ মিক্স (ডিসকভারি)' : 'Curated Mix'}</option>
                 <option value="featured">{language === 'bn' ? 'ফিচার্ড' : 'Featured'}</option>
                 <option value="price-asc">{language === 'bn' ? 'দাম: কম → বেশি' : 'Price: Low → High'}</option>
                 <option value="price-desc">{language === 'bn' ? 'দাম: বেশি → কম' : 'Price: High → Low'}</option>

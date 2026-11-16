@@ -156,7 +156,7 @@ export const ProductQuickViewModal: React.FC = () => {
                           />
                         ))}
                       </div>
-                      <span className="text-xs font-bold text-white">{product.rating}</span>
+                      <span className="text-xs font-bold text-white">{Number(product.rating).toFixed(1)}</span>
                       <span className="text-xs text-[#70707C]">({product.reviewsCount} reviews)</span>
                     </div>
 

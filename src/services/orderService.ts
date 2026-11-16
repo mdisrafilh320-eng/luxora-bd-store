@@ -7,9 +7,11 @@ import {
   query, 
   where, 
   orderBy, 
-  updateDoc 
+  updateDoc,
+  onSnapshot,
+  Unsubscribe
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Order, OrderStatus, CourierTracking } from '../types';
 
 const ORDERS_COLLECTION = 'orders';
@@ -132,29 +134,99 @@ export async function createOrder(
 }
 
 /**
- * Fetch all orders placed by a specific user
+ * Fetch all orders placed strictly by the currently logged-in user (UID isolated).
+ * Never queries or returns orders belonging to other customers.
  */
-export async function getUserOrders(userId: string): Promise<Order[]> {
+export async function getUserOrders(userId?: string): Promise<Order[]> {
+  const authUid = auth.currentUser?.uid;
+  if (!authUid) {
+    return [];
+  }
+  if (userId && userId !== authUid) {
+    console.warn('Blocked cross-user order query attempt.');
+    return [];
+  }
+
   try {
     const colRef = collection(db, ORDERS_COLLECTION);
-    const q = query(
-      colRef, 
-      where('userId', '==', userId), 
-      orderBy('createdAt', 'desc')
-    );
+    const q = query(colRef, where('userId', '==', authUid));
     const snap = await getDocs(q);
-    const orders: Order[] = [];
+    const orderMap = new Map<string, Order>();
+
     snap.forEach((docSnap) => {
-      orders.push(docSnap.data() as Order);
+      const data = docSnap.data() as Order;
+      if (data && data.userId === authUid) {
+        orderMap.set(data.id || docSnap.id, { ...data, id: data.id || docSnap.id });
+      }
     });
+
+    // Include only matching UID items from local cache if recently placed offline
+    getLocalCachedOrders().forEach((cached) => {
+      if (cached && cached.id && cached.userId === authUid && !orderMap.has(cached.id)) {
+        orderMap.set(cached.id, cached);
+      }
+    });
+
+    const orders = Array.from(orderMap.values());
+    orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return orders;
   } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, `${ORDERS_COLLECTION}?userId=${userId}`);
+    handleFirestoreError(error, OperationType.LIST, `${ORDERS_COLLECTION}?userId=${authUid}`);
+    return [];
   }
 }
 
 /**
- * Retrieve a single order by ID
+ * Subscribe in real-time to ONLY the logged-in user's own orders (strictly filtered by auth.currentUser.uid).
+ */
+export function subscribeToUserOrders(
+  onUpdate: (orders: Order[]) => void,
+  onError?: (error: unknown) => void
+): Unsubscribe {
+  const authUid = auth.currentUser?.uid;
+  if (!authUid) {
+    onUpdate([]);
+    return () => {};
+  }
+
+  try {
+    const colRef = collection(db, ORDERS_COLLECTION);
+    const q = query(colRef, where('userId', '==', authUid));
+
+    return onSnapshot(
+      q,
+      (snap) => {
+        const orderMap = new Map<string, Order>();
+        snap.forEach((docSnap) => {
+          const data = docSnap.data() as Order;
+          if (data && data.userId === authUid) {
+            orderMap.set(data.id || docSnap.id, { ...data, id: data.id || docSnap.id });
+          }
+        });
+
+        getLocalCachedOrders().forEach((cached) => {
+          if (cached && cached.id && cached.userId === authUid && !orderMap.has(cached.id)) {
+            orderMap.set(cached.id, cached);
+          }
+        });
+
+        const orders = Array.from(orderMap.values());
+        orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        onUpdate(orders);
+      },
+      (error) => {
+        if (onError) onError(error);
+        handleFirestoreError(error, OperationType.LIST, `${ORDERS_COLLECTION}?userId=${authUid}`);
+      }
+    );
+  } catch (error) {
+    if (onError) onError(error);
+    return () => {};
+  }
+}
+
+/**
+ * Retrieve a single order by ID (enforced by Firestore ownership/admin rules)
  */
 export async function getOrderById(orderId: string): Promise<Order | null> {
   try {
@@ -166,6 +238,7 @@ export async function getOrderById(orderId: string): Promise<Order | null> {
     return null;
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, `${ORDERS_COLLECTION}/${orderId}`);
+    return null;
   }
 }
 
@@ -193,49 +266,58 @@ export async function updateOrderStatus(
 }
 
 /**
- * Search orders by Order ID or Phone number for guest and customer tracking
+ * Search ONLY within the logged-in user's own orders by Order ID or Phone number
+ * (Admins can resolve individual Order IDs directly; never scans all orders on client).
  */
-export async function searchOrdersForTracking(searchQuery: string): Promise<Order | null> {
+export async function searchOrdersForTracking(searchQuery: string, isAdminUser = false): Promise<Order | null> {
   const cleanQuery = searchQuery.trim();
   if (!cleanQuery) return null;
 
-  try {
-    // 1. If it looks like an Order ID (starts with LUX or contains uppercase numbers)
-    const upperId = cleanQuery.toUpperCase();
-    if (upperId.startsWith('LUX-') || upperId.length >= 6) {
-      const order = await getOrderById(upperId);
-      if (order) return order;
-    }
-
-    // 2. If it is a phone number, query by customer.phone
-    const colRef = collection(db, ORDERS_COLLECTION);
-    const phoneQuery = query(
-      colRef,
-      where('customer.phone', '==', cleanQuery),
-      orderBy('createdAt', 'desc')
-    );
-    const snap = await getDocs(phoneQuery);
-    if (!snap.empty) {
-      return snap.docs[0].data() as Order;
-    }
-
-    // 3. Check for formatted phone number variation (e.g. +880 vs 017...)
-    const cleanDigits = cleanQuery.replace(/[^0-9]/g, '');
-    if (cleanDigits.length >= 10) {
-      const allOrdersSnap = await getDocs(query(colRef, orderBy('createdAt', 'desc')));
-      for (const docSnap of allOrdersSnap.docs) {
-        const data = docSnap.data() as Order;
-        const custPhoneDigits = (data.customer?.phone || '').replace(/[^0-9]/g, '');
-        if (custPhoneDigits.includes(cleanDigits) || cleanDigits.includes(custPhoneDigits)) {
-          return data;
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('Firestore search order error:', err);
+  const authUid = auth.currentUser?.uid;
+  if (!authUid) {
+    return null;
   }
 
-  return null;
+  try {
+    const upperId = cleanQuery.toUpperCase();
+    // 1. Direct single-document Order ID lookup (strictly gated by Firestore rules)
+    if (upperId.startsWith('LUX-') || upperId.length >= 6) {
+      try {
+        const orderRef = doc(db, ORDERS_COLLECTION, upperId);
+        const snap = await getDoc(orderRef);
+        if (snap.exists()) {
+          const order = snap.data() as Order;
+          if (isAdminUser || order.userId === authUid) {
+            return order;
+          }
+        }
+      } catch {
+        // Permission denied or invalid doc ID -> fall through to own orders search
+      }
+    }
+
+    // 2. Search strictly inside the logged-in user's own orders (where userId == auth.currentUser.uid)
+    const ownOrders = await getUserOrders(authUid);
+    const cleanDigits = cleanQuery.replace(/[^0-9]/g, '');
+
+    const matched = ownOrders.find((order) => {
+      if (order.id.toUpperCase() === upperId) return true;
+      if (order.trackingInfo?.trackingNumber?.toUpperCase() === upperId) return true;
+      if (order.trackingInfo?.consignmentId?.toUpperCase() === upperId) return true;
+      if (cleanDigits.length >= 6) {
+        const custDigits = (order.customer?.phone || '').replace(/[^0-9]/g, '');
+        if (custDigits && (custDigits.includes(cleanDigits) || cleanDigits.includes(custDigits))) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    return matched || null;
+  } catch (err) {
+    console.warn('Order tracking lookup notice:', err);
+    return null;
+  }
 }
 
 /**
@@ -294,22 +376,20 @@ export function getSampleTrackingOrder(orderId: string = 'LUX-892014'): Order {
 }
 
 /**
- * Fetch all orders for Enterprise ERP Admin Hub
+ * Fetch all orders for Enterprise ERP Admin Hub (strictly requires authenticated session + Firestore admin rules)
  */
 export async function getAllOrders(): Promise<Order[]> {
-  const localOrders = getLocalCachedOrders();
-  const orderMap = new Map<string, Order>();
+  if (!auth.currentUser?.uid) {
+    return [];
+  }
 
-  // Add local orders first
-  localOrders.forEach((o) => {
-    if (o && o.id) orderMap.set(o.id, o);
-  });
+  const orderMap = new Map<string, Order>();
 
   try {
     const colRef = collection(db, ORDERS_COLLECTION);
     const q = query(colRef, orderBy('createdAt', 'desc'));
     const snap = await getDocs(q);
-    
+
     snap.forEach((docSnap) => {
       const liveOrder = docSnap.data() as Order;
       if (liveOrder && liveOrder.id) {
@@ -318,6 +398,7 @@ export async function getAllOrders(): Promise<Order[]> {
     });
   } catch (error) {
     console.warn('Orders catalog Firestore fetch note:', error);
+    handleFirestoreError(error, OperationType.LIST, ORDERS_COLLECTION);
   }
 
   const allOrders = Array.from(orderMap.values());
@@ -573,6 +654,7 @@ export const orderService = {
   generateOrderId,
   createOrder,
   getUserOrders,
+  subscribeToUserOrders,
   getOrderById,
   getAllOrders,
   updateOrderStatus,

@@ -12,7 +12,6 @@ import {
   LogOut,
   Package,
   Headphones,
-  Sliders,
   Truck,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -34,7 +33,6 @@ export const Header: React.FC = () => {
     activeView,
     setActiveView,
     isAdmin,
-    toggleAdminRole,
     logout,
     categories: dynamicCategories,
   } = useApp();
@@ -248,31 +246,33 @@ export const Header: React.FC = () => {
               </button>
 
               {isAdmin && (
-                <button
-                  onClick={() => setActiveView('admin')}
-                  className={`whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all cursor-pointer ${
-                    activeView === 'admin'
-                      ? 'bg-[#D4AF37] text-black font-bold border-[#D4AF37] shadow-[0_0_12px_rgba(212,175,55,0.35)]'
-                      : 'border-[#D4AF37]/50 bg-[#D4AF37]/10 text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black font-semibold'
-                  }`}
-                  title="Enterprise Admin ERP Control Center"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>{language === 'bn' ? 'অ্যাডমিন প্যানেল' : 'Admin ERP'}</span>
-                </button>
-              )}
+                <>
+                  <button
+                    onClick={() => setActiveView('admin')}
+                    className={`whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all cursor-pointer ${
+                      activeView === 'admin'
+                        ? 'bg-[#D4AF37] text-black font-bold border-[#D4AF37] shadow-[0_0_12px_rgba(212,175,55,0.35)]'
+                        : 'border-[#D4AF37]/50 bg-[#D4AF37]/10 text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black font-semibold'
+                    }`}
+                    title="Enterprise Admin ERP Control Center"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>{language === 'bn' ? 'অ্যাডমিন প্যানেল' : 'Admin ERP'}</span>
+                  </button>
 
-              <button
-                onClick={() => setActiveView('design-system')}
-                className={`whitespace-nowrap shrink-0 hidden xl:flex items-center gap-1.5 transition-colors cursor-pointer py-1.5 ${
-                  activeView === 'design-system'
-                    ? 'gold-text border-b gold-border font-bold'
-                    : 'text-gray-500 hover:text-white border-b border-transparent'
-                }`}
-              >
-                <Layers className="w-3 h-3" />
-                <span>{language === 'bn' ? 'টোকেন' : 'Tokens'}</span>
-              </button>
+                  <button
+                    onClick={() => setActiveView('design-system')}
+                    className={`whitespace-nowrap shrink-0 hidden xl:flex items-center gap-1.5 transition-colors cursor-pointer py-1.5 ${
+                      activeView === 'design-system'
+                        ? 'gold-text border-b gold-border font-bold'
+                        : 'text-gray-500 hover:text-white border-b border-transparent'
+                    }`}
+                  >
+                    <Layers className="w-3 h-3" />
+                    <span>{language === 'bn' ? 'টোকেন' : 'Tokens'}</span>
+                  </button>
+                </>
+              )}
             </nav>
           </div>
 
@@ -447,28 +447,6 @@ export const Header: React.FC = () => {
 
                   <div className="border-t border-white/5 mt-1.5 pt-1.5">
                     <button
-                      onClick={() => {
-                        toggleAdminRole();
-                        setIsUserMenuOpen(false);
-                      }}
-                      className="w-full text-left px-3 min-h-[38px] rounded-xl text-[11px] text-gray-400 hover:text-[#D4AF37] hover:bg-white/5 transition-colors flex items-center justify-between cursor-pointer"
-                    >
-                      <span className="flex items-center gap-2">
-                        <Sliders className="w-3 h-3" />
-                        <span>Toggle Admin Access</span>
-                      </span>
-                      <span
-                        className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
-                          isAdmin
-                            ? 'text-green-400 bg-green-950/40 border border-green-500/30'
-                            : 'text-gray-500 bg-white/5'
-                        }`}
-                      >
-                        {isAdmin ? 'ON' : 'OFF'}
-                      </span>
-                    </button>
-
-                    <button
                       onClick={async () => {
                         setIsUserMenuOpen(false);
                         await logout();
@@ -568,35 +546,39 @@ export const Header: React.FC = () => {
                     )}
                   </button>
 
-                  <button
-                    onClick={() => {
-                      setActiveView('admin');
-                      setIsMobileMenuOpen(false);
-                    }}
-                    className={`min-h-[44px] px-3.5 py-2.5 text-xs font-semibold rounded-xl text-left flex items-center gap-2 cursor-pointer transition-colors ${
-                      activeView === 'admin'
-                        ? 'bg-[#D4AF37] text-black font-bold'
-                        : 'bg-[#14141A] text-[#D4AF37] border border-[#D4AF37]/30 hover:bg-[#1C1D25]'
-                    }`}
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-                    <span>{language === 'bn' ? 'ইআরপি অ্যাডমিন' : 'ERP Admin'}</span>
-                  </button>
+                  {isAdmin && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setActiveView('admin');
+                          setIsMobileMenuOpen(false);
+                        }}
+                        className={`min-h-[44px] px-3.5 py-2.5 text-xs font-semibold rounded-xl text-left flex items-center gap-2 cursor-pointer transition-colors ${
+                          activeView === 'admin'
+                            ? 'bg-[#D4AF37] text-black font-bold'
+                            : 'bg-[#14141A] text-[#D4AF37] border border-[#D4AF37]/30 hover:bg-[#1C1D25]'
+                        }`}
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                        <span>{language === 'bn' ? 'ইআরপি অ্যাডমিন' : 'ERP Admin'}</span>
+                      </button>
 
-                  <button
-                    onClick={() => {
-                      setActiveView('design-system');
-                      setIsMobileMenuOpen(false);
-                    }}
-                    className={`min-h-[44px] px-3.5 py-2.5 text-xs font-semibold rounded-xl text-left flex items-center gap-2 cursor-pointer transition-colors ${
-                      activeView === 'design-system'
-                        ? 'bg-[#D4AF37] text-black font-bold'
-                        : 'bg-[#14141A] text-gray-300 hover:bg-[#1C1D25]'
-                    }`}
-                  >
-                    <Layers className="w-3.5 h-3.5 shrink-0 text-[#D4AF37]" />
-                    <span>{t('navDesignSystem')}</span>
-                  </button>
+                      <button
+                        onClick={() => {
+                          setActiveView('design-system');
+                          setIsMobileMenuOpen(false);
+                        }}
+                        className={`min-h-[44px] px-3.5 py-2.5 text-xs font-semibold rounded-xl text-left flex items-center gap-2 cursor-pointer transition-colors ${
+                          activeView === 'design-system'
+                            ? 'bg-[#D4AF37] text-black font-bold'
+                            : 'bg-[#14141A] text-gray-300 hover:bg-[#1C1D25]'
+                        }`}
+                      >
+                        <Layers className="w-3.5 h-3.5 shrink-0 text-[#D4AF37]" />
+                        <span>{t('navDesignSystem')}</span>
+                      </button>
+                    </>
+                  )}
                 </div>
 
                 <div className="pt-1">

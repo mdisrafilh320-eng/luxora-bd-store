@@ -17,7 +17,7 @@ import {
 import { adminRbacService, isSuperAdminEmail, PRIMARY_SUPER_ADMIN_EMAIL } from '../services/adminRbacService';
 import { translations } from '../translations';
 import { mockProducts } from '../data/mockProducts';
-import { validateFirestoreConnection } from '../lib/firebase';
+import { auth, validateFirestoreConnection } from '../lib/firebase';
 import {
   loginWithEmail as fbLoginWithEmail,
   registerWithEmail as fbRegisterWithEmail,
@@ -31,7 +31,13 @@ import {
   checkRedirectResult,
   getPendingRegistrationSync
 } from '../services/authService';
-import { getProducts, subscribeToProducts, getLocalCachedProducts } from '../services/productService';
+import {
+  getProducts,
+  subscribeToProducts,
+  getLocalCachedProducts,
+  sortProductsForCatalogDisplay,
+  reshuffleVisitCatalogOrder,
+} from '../services/productService';
 import { paymentService, DEFAULT_PAYMENT_SETTINGS } from '../services/paymentService';
 import {
   subscribeToBanners,
@@ -54,6 +60,7 @@ interface AppContextType {
   products: Product[];
   isLoadingProducts: boolean;
   refreshProducts: () => Promise<void>;
+  reshuffleCatalog: () => void;
   addProductToState: (product: Product) => void;
   removeProductFromState: (productId: string) => void;
 
@@ -109,6 +116,8 @@ interface AppContextType {
   // Active View Switcher (Store vs. Checkout vs. Track vs. Support vs. Design System Explorer vs. Account vs. Admin ERP)
   activeView: 'store' | 'checkout' | 'track' | 'support' | 'design-system' | 'account' | 'admin';
   setActiveView: (view: 'store' | 'checkout' | 'track' | 'support' | 'design-system' | 'account' | 'admin') => void;
+  trackingOrderId: string;
+  setTrackingOrderId: (orderId: string) => void;
   cartItemsCount: number;
 
   // Enterprise Admin RBAC
@@ -193,15 +202,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // Products state (initialized from cached catalog, kept in sync in real time)
-  const [products, setProducts] = useState<Product[]>(() => getLocalCachedProducts());
+  // Products state (initialized from cached catalog with per-visit fair shuffle & stock-out at bottom)
+  const [products, setProducts] = useState<Product[]>(() =>
+    sortProductsForCatalogDisplay(getLocalCachedProducts())
+  );
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
 
-  // Optimistic state updater to display newly created/edited items immediately
+  // Optimistic state updater to reflect newly created/edited items immediately
   const addProductToState = useCallback((newProduct: Product) => {
     setProducts((prev) => {
       const filtered = prev.filter((p) => p.id !== newProduct.id);
-      return [newProduct, ...filtered];
+      return sortProductsForCatalogDisplay([newProduct, ...filtered]);
     });
   }, []);
 
@@ -209,12 +220,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setProducts((prev) => prev.filter((p) => p.id !== productId));
   }, []);
 
+  const reshuffleCatalog = useCallback(() => {
+    setProducts((prev) => {
+      reshuffleVisitCatalogOrder(prev.map((p) => p.id));
+      return sortProductsForCatalogDisplay(prev);
+    });
+  }, []);
+
   const refreshProducts = useCallback(async () => {
     setIsLoadingProducts(true);
     try {
       const data = await getProducts();
       if (Array.isArray(data)) {
-        setProducts(data);
+        setProducts(sortProductsForCatalogDisplay(data));
       }
     } catch (err) {
       console.warn('Failed to load products from Firestore:', err);
@@ -511,21 +529,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory>('all');
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
 
-  // View state
+  // View & Direct Order Tracking state
   const [activeView, setActiveView] = useState<'store' | 'checkout' | 'track' | 'support' | 'design-system' | 'account' | 'admin'>('store');
+  const [trackingOrderId, setTrackingOrderId] = useState<string>('');
 
-  // Enterprise Admin RBAC State
-  const [adminRole, setAdminRole] = useState<AdminRole | null>(() => {
-    if (user?.email && isSuperAdminEmail(user.email)) return 'super_admin';
-    return null;
-  });
-  const [isAdmin, setIsAdminState] = useState<boolean>(() => {
-    return Boolean(user?.email && isSuperAdminEmail(user.email));
-  });
-  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(() => {
-    return Boolean(user?.email && isSuperAdminEmail(user.email));
-  });
-  const [isCheckingAdminStatus, setIsCheckingAdminStatus] = useState<boolean>(false);
+  // Enterprise Admin RBAC State (never trust cached localStorage before live Firebase Auth verification)
+  const [adminRole, setAdminRole] = useState<AdminRole | null>(null);
+  const [isAdmin, setIsAdminState] = useState<boolean>(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false);
+  const [isCheckingAdminStatus, setIsCheckingAdminStatus] = useState<boolean>(true);
 
   // Eliminate any legacy localStorage overrides
   useEffect(() => {
@@ -534,8 +546,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
   }, []);
 
-  const verifyUserAdminStatus = useCallback(async (targetUser: UserProfile | null) => {
-    if (!targetUser || targetUser.isGuest) {
+  const verifyUserAdminStatus = useCallback(async (targetUser: UserProfile | null, authReady: boolean) => {
+    if (!authReady) {
+      setIsCheckingAdminStatus(true);
+      return;
+    }
+
+    const fbUser = auth.currentUser;
+    if (!fbUser || !targetUser || targetUser.isGuest || fbUser.uid !== targetUser.id) {
       setIsAdminState(false);
       setIsSuperAdmin(false);
       setAdminRole(null);
@@ -543,7 +561,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    if (isSuperAdminEmail(targetUser.email)) {
+    const verifiedEmail = fbUser.email || targetUser.email;
+    if (isSuperAdminEmail(verifiedEmail)) {
       setIsAdminState(true);
       setIsSuperAdmin(true);
       setAdminRole('super_admin');
@@ -553,7 +572,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setIsCheckingAdminStatus(true);
     try {
-      const res = await adminRbacService.verifyAdminAccess(targetUser.email, targetUser.id);
+      const res = await adminRbacService.verifyAdminAccess(verifiedEmail, fbUser.uid);
       setIsAdminState(res.isAuthorized);
       setIsSuperAdmin(res.isSuperAdmin);
       setAdminRole(res.isAuthorized ? (res.role as AdminRole) : null);
@@ -568,21 +587,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   useEffect(() => {
-    verifyUserAdminStatus(user);
-  }, [user, verifyUserAdminStatus]);
+    verifyUserAdminStatus(user, !isAuthLoading);
+  }, [user, isAuthLoading, verifyUserAdminStatus]);
 
   const refreshAdminStatus = async () => {
-    await verifyUserAdminStatus(user);
+    await verifyUserAdminStatus(user, !isAuthLoading);
   };
 
   const setIsAdmin = (value: boolean) => {
     if (!isSuperAdmin && !isAdmin) {
       addToast({
         type: 'error',
-        titleEn: 'Admin Access Restricted',
-        titleBn: 'অ্যাডমিন এক্সেস সংরক্ষিত',
-        descriptionEn: 'You do not have permission to manually enable admin mode.',
-        descriptionBn: 'আপনার অ্যাকাউন্টে অ্যাডমিন মোড চালুর অনুমতি নেই।',
+        titleEn: 'Access Denied',
+        titleBn: 'অ্যাক্সেস ডিনাইড',
+        descriptionEn: 'Administrator privileges are required.',
+        descriptionBn: 'অ্যাডমিন অনুমোদন প্রয়োজন।',
       });
       return;
     }
@@ -593,12 +612,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!isAdmin) {
       addToast({
         type: 'error',
-        titleEn: 'Authentication Required',
-        titleBn: 'লগইন আবশ্যক',
-        descriptionEn: 'Please sign in with an authorized admin account to access ERP.',
-        descriptionBn: 'ইআরপি ব্যবহারে অনুমোদিত অ্যাডমিন অ্যাকাউন্ট দিয়ে সাইন ইন করুন।',
+        titleEn: 'Access Denied',
+        titleBn: 'অ্যাক্সেস ডিনাইড',
+        descriptionEn: 'You do not have permission to access the Admin Panel.',
+        descriptionBn: 'আপনার অ্যাডমিন প্যানেলে প্রবেশের অনুমতি নেই।',
       });
-      setActiveView('admin');
+      setActiveView('store');
+      if (!user || user.isGuest) {
+        setIsAuthModalOpen(true);
+      }
       return;
     }
     if (activeView === 'admin') {
@@ -718,6 +740,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         products,
         isLoadingProducts,
         refreshProducts,
+        reshuffleCatalog,
         addProductToState,
         removeProductFromState,
         cart,
@@ -762,6 +785,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         removeToast,
         activeView,
         setActiveView,
+        trackingOrderId,
+        setTrackingOrderId,
         isAdmin,
         isSuperAdmin,
         adminRole,

@@ -3,24 +3,29 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, Flame, Crown, ArrowRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { ProductCard } from './ProductCard';
-import { SectionHeader } from '../ui/SectionHeader';
+import { sortProductsForCatalogDisplay } from '../../services/productService';
 
 type ShowcaseTab = 'trending' | 'new' | 'bestsellers';
 
 export const FeaturedShowcase: React.FC = () => {
-  const { products, language, t, setSelectedCategory } = useApp();
+  const { products, language } = useApp();
   const [activeTab, setActiveTab] = useState<ShowcaseTab>('trending');
 
   const displayedProducts = useMemo(() => {
+    let candidates = products;
     switch (activeTab) {
       case 'new':
-        return products.filter((p) => p.badge === 'new' || p.isFeatured).slice(0, 4);
+        candidates = products.filter((p) => p.badge === 'new' || p.isFeatured);
+        break;
       case 'bestsellers':
-        return products.filter((p) => p.badge === 'bestseller' || p.reviewsCount > 50).slice(0, 4);
+        candidates = products.filter((p) => p.badge === 'bestseller' || p.reviewsCount > 50);
+        break;
       case 'trending':
       default:
-        return products.filter((p) => p.isFeatured || p.rating >= 4.9).slice(0, 4);
+        candidates = products.filter((p) => p.isFeatured || p.rating >= 4.9);
+        break;
     }
+    return sortProductsForCatalogDisplay(candidates.length > 0 ? candidates : products).slice(0, 4);
   }, [products, activeTab]);
 
   if (!products || products.length === 0) {

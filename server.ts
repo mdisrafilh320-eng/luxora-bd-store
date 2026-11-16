@@ -1,10 +1,224 @@
 import express from "express";
+import fs from "fs";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
+import { initializeApp, getApps } from "firebase/app";
+import { getFirestore, doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 import dotenv from "dotenv";
 
 dotenv.config();
+
+// Load Firebase config & initialize server-side Firestore SDK for reliable crawler OG previews
+let serverDb: ReturnType<typeof getFirestore> | null = null;
+try {
+  const cfgPath = path.join(process.cwd(), "firebase-applet-config.json");
+  if (fs.existsSync(cfgPath)) {
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf-8"));
+    const fbApp = getApps().length > 0 ? getApps()[0] : initializeApp(cfg);
+    serverDb = getFirestore(fbApp, cfg.firestoreDatabaseId);
+  }
+} catch (err) {
+  console.warn("Server Firestore OG init notice:", err);
+}
+
+interface OgProductRecord {
+  id: string;
+  nameEn: string;
+  nameBn: string;
+  taglineEn: string;
+  descriptionEn: string;
+  price: number;
+  originalPrice: number;
+  image: string;
+}
+
+const ogProductCache = new Map<string, { data: OgProductRecord | null; expiresAt: number }>();
+
+function escapeHtmlAttr(val: string): string {
+  return String(val || "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function getRequestPublicOrigin(req: express.Request): string {
+  const proto =
+    (req.headers["x-forwarded-proto"] as string)?.split(",")[0]?.trim() ||
+    req.protocol ||
+    "https";
+  const host =
+    (req.headers["x-forwarded-host"] as string)?.split(",")[0]?.trim() ||
+    req.get("host") ||
+    "";
+
+  if (host && !/^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/i.test(host)) {
+    return `${proto}://${host}`;
+  }
+  if (process.env.APP_URL) {
+    return process.env.APP_URL.replace(/\/+$/, "");
+  }
+  return host ? `${proto}://${host}` : "";
+}
+
+async function fetchProductForOpenGraph(productId: string): Promise<OgProductRecord | null> {
+  const cleanId = productId.replace(/[^a-zA-Z0-9_.@-]/g, "_").trim();
+  if (!cleanId || !serverDb) return null;
+
+  const cached = ogProductCache.get(cleanId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.data;
+  }
+
+  let resolved: OgProductRecord | null = null;
+  const collections = ["products", "luxora-products"];
+
+  for (const col of collections) {
+    try {
+      const snap = await Promise.race([
+        getDoc(doc(serverDb, col, cleanId)),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("OG fetch timeout")), 3500)),
+      ]);
+
+      if (snap.exists()) {
+        const d: any = snap.data() || {};
+        const galleryArr = Array.isArray(d.gallery) ? d.gallery : [];
+        const coverImage = String(d.image || galleryArr[0] || "").trim();
+        resolved = {
+          id: String(d.id || snap.id || cleanId),
+          nameEn: String(d.nameEn || d.nameBn || "Luxora Curated Edition").trim(),
+          nameBn: String(d.nameBn || "").trim(),
+          taglineEn: String(d.taglineEn || "").trim(),
+          descriptionEn: String(d.descriptionEn || "").trim(),
+          price: Number(d.price) || 0,
+          originalPrice: Number(d.originalPrice) || 0,
+          image: coverImage,
+        };
+        break;
+      }
+
+      // Fallback check in case document ID differs from `id` field
+      const qSnap = await getDocs(query(collection(serverDb, col), where("id", "==", productId.trim())));
+      if (!qSnap.empty) {
+        const firstDoc = qSnap.docs[0];
+        const d: any = firstDoc.data() || {};
+        const galleryArr = Array.isArray(d.gallery) ? d.gallery : [];
+        const coverImage = String(d.image || galleryArr[0] || "").trim();
+        resolved = {
+          id: String(d.id || firstDoc.id || cleanId),
+          nameEn: String(d.nameEn || d.nameBn || "Luxora Curated Edition").trim(),
+          nameBn: String(d.nameBn || "").trim(),
+          taglineEn: String(d.taglineEn || "").trim(),
+          descriptionEn: String(d.descriptionEn || "").trim(),
+          price: Number(d.price) || 0,
+          originalPrice: Number(d.originalPrice) || 0,
+          image: coverImage,
+        };
+        break;
+      }
+    } catch {
+      // Try next collection
+    }
+  }
+
+  ogProductCache.set(cleanId, {
+    data: resolved,
+    expiresAt: Date.now() + (resolved ? 60_000 : 10_000),
+  });
+  return resolved;
+}
+
+function stripMetaTag(html: string, attrName: "property" | "name", attrVal: string): string {
+  const escaped = attrVal.replace(/[:.]/g, "\\$&");
+  const regex = new RegExp(`<meta\\b[^>]*\\b${attrName}=["']${escaped}["'][^>]*>\\s*`, "gi");
+  return html.replace(regex, "");
+}
+
+function replaceOrInsertMeta(html: string, attrName: "property" | "name", attrVal: string, content: string): string {
+  const cleaned = stripMetaTag(html, attrName, attrVal);
+  const tag = `<meta ${attrName}="${attrVal}" content="${escapeHtmlAttr(content)}" />`;
+  return cleaned.replace("</head>", `  ${tag}\n  </head>`);
+}
+
+function injectProductOpenGraphIntoHtml(
+  html: string,
+  product: OgProductRecord | null,
+  req: express.Request
+): string {
+  if (!product) return html;
+
+  const origin = getRequestPublicOrigin(req);
+  const canonicalUrl = origin
+    ? `${origin}/product/${encodeURIComponent(product.id)}`
+    : `/product/${encodeURIComponent(product.id)}`;
+
+  const formattedPrice = product.price > 0 ? `৳${product.price.toLocaleString("en-IN")}` : "";
+  const ogTitle = formattedPrice
+    ? `${product.nameEn} — ${formattedPrice} | Luxora BD`
+    : `${product.nameEn} | Luxora BD`;
+  const msrpPart =
+    product.originalPrice > product.price
+      ? ` (MSRP ৳${product.originalPrice.toLocaleString("en-IN")})`
+      : "";
+  const bodySnippet = (
+    product.taglineEn ||
+    product.descriptionEn ||
+    "100% Authentic Luxury Collection — Cash on Delivery across Bangladesh."
+  )
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 145);
+  const ogDescription = `${formattedPrice ? `${formattedPrice}${msrpPart} · ` : ""}${bodySnippet}`;
+
+  let ogImage = "";
+  let ogImageType = "";
+  if (product.image) {
+    if (/^https?:\/\//i.test(product.image)) {
+      ogImage = product.image;
+    } else if (product.image.startsWith("data:image/")) {
+      const mimeMatch = product.image.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,/i);
+      ogImageType = mimeMatch?.[1]?.toLowerCase() || "image/webp";
+      ogImage = origin
+        ? `${origin}/api/og-image/${encodeURIComponent(product.id)}`
+        : `/api/og-image/${encodeURIComponent(product.id)}`;
+    } else if (product.image.startsWith("/")) {
+      ogImage = origin ? `${origin}${product.image}` : product.image;
+    }
+  }
+
+  let out = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtmlAttr(ogTitle)}</title>`);
+  out = replaceOrInsertMeta(out, "name", "description", ogDescription);
+  out = replaceOrInsertMeta(out, "property", "og:type", "product");
+  out = replaceOrInsertMeta(out, "property", "og:site_name", "Luxora BD");
+  out = replaceOrInsertMeta(out, "property", "og:title", ogTitle);
+  out = replaceOrInsertMeta(out, "property", "og:description", ogDescription);
+  out = replaceOrInsertMeta(out, "property", "og:url", canonicalUrl);
+
+  if (ogImage) {
+    out = replaceOrInsertMeta(out, "property", "og:image", ogImage);
+    out = replaceOrInsertMeta(out, "property", "og:image:alt", product.nameEn);
+    if (ogImageType) {
+      out = replaceOrInsertMeta(out, "property", "og:image:type", ogImageType);
+    }
+    out = replaceOrInsertMeta(out, "name", "twitter:image", ogImage);
+  } else {
+    out = stripMetaTag(out, "property", "og:image");
+    out = stripMetaTag(out, "property", "og:image:type");
+    out = stripMetaTag(out, "property", "og:image:alt");
+    out = stripMetaTag(out, "name", "twitter:image");
+  }
+
+  if (product.price > 0) {
+    out = replaceOrInsertMeta(out, "property", "product:price:amount", String(product.price));
+    out = replaceOrInsertMeta(out, "property", "product:price:currency", "BDT");
+  }
+  out = replaceOrInsertMeta(out, "name", "twitter:card", "summary_large_image");
+  out = replaceOrInsertMeta(out, "name", "twitter:title", ogTitle);
+  out = replaceOrInsertMeta(out, "name", "twitter:description", ogDescription);
+  return out;
+}
 
 const app = express();
 const PORT = 3000;
@@ -66,6 +280,49 @@ Keep your replies concise, well-formatted with markdown/bullet points when appro
 // API Routes
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// Serve actual binary product cover image for social crawlers (Facebook, WhatsApp, Messenger)
+// Converts stored data:image/*;base64 payloads into standard HTTP image responses
+app.get("/api/og-image/:productId", async (req, res) => {
+  try {
+    const rawId = decodeURIComponent(String(req.params.productId || "")).trim();
+    if (!rawId) {
+      res.status(404).end();
+      return;
+    }
+
+    const product = await fetchProductForOpenGraph(rawId);
+    if (!product || !product.image) {
+      res.status(404).end();
+      return;
+    }
+
+    if (/^https?:\/\//i.test(product.image)) {
+      res.redirect(302, product.image);
+      return;
+    }
+
+    const dataUriMatch = product.image.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/i);
+    if (dataUriMatch) {
+      const mimeType = dataUriMatch[1].toLowerCase();
+      const buffer = Buffer.from(dataUriMatch[2], "base64");
+      res
+        .status(200)
+        .set({
+          "Content-Type": mimeType,
+          "Content-Length": String(buffer.length),
+          "Cache-Control": "public, max-age=3600",
+        })
+        .send(buffer);
+      return;
+    }
+
+    res.status(404).end();
+  } catch (err) {
+    console.warn("OG image endpoint error:", err);
+    res.status(404).end();
+  }
 });
 
 // Gemini AI Chat Proxy Endpoint
@@ -520,19 +777,79 @@ function parseRawProductNotesFallback(
   };
 }
 
-// Start Server with Vite Middleware
+// Start Server with Vite Middleware & Dynamic Product OpenGraph Preview Support
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
+
+    // Inject dynamic Open Graph tags for shared product deep links (/product/:id or /?product=:id)
+    app.get(["/product/:productId", "/"], async (req, res, next) => {
+      const requestedProductId =
+        (req.params as any)?.productId ||
+        (typeof req.query.product === "string" ? req.query.product : "");
+      if (!requestedProductId || !String(requestedProductId).trim()) {
+        return next();
+      }
+      try {
+        const indexPath = path.resolve(process.cwd(), "index.html");
+        const rawHtml = fs.readFileSync(indexPath, "utf-8");
+        const transformedHtml = await vite.transformIndexHtml(req.originalUrl, rawHtml);
+        const product = await fetchProductForOpenGraph(String(requestedProductId).trim());
+        const finalHtml = injectProductOpenGraphIntoHtml(transformedHtml, product, req);
+        res.status(200).set({ "Content-Type": "text/html" }).end(finalHtml);
+      } catch (err) {
+        console.warn("Dev OG injection fallback:", err);
+        next();
+      }
+    });
+
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
+
+    // Handle /product/:productId and /?product=:productId before static file serving
+    app.get(["/product/:productId", "/"], async (req, res, next) => {
+      const requestedProductId =
+        (req.params as any)?.productId ||
+        (typeof req.query.product === "string" ? req.query.product : "");
+      if (!requestedProductId || !String(requestedProductId).trim()) {
+        return next();
+      }
+      try {
+        const indexFile = path.join(distPath, "index.html");
+        const rawHtml = fs.readFileSync(indexFile, "utf-8");
+        const product = await fetchProductForOpenGraph(String(requestedProductId).trim());
+        const finalHtml = injectProductOpenGraphIntoHtml(rawHtml, product, req);
+        res.status(200).set({ "Content-Type": "text/html" }).send(finalHtml);
+      } catch (err) {
+        console.warn("Prod OG injection fallback:", err);
+        next();
+      }
+    });
+
     app.use(express.static(distPath));
-    app.get("*", (_req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+    app.get("*", async (req, res) => {
+      const indexFile = path.join(distPath, "index.html");
+      const pathMatch = req.path.match(/^\/product\/([^/?#]+)/i);
+      const requestedProductId =
+        (pathMatch && pathMatch[1] ? decodeURIComponent(pathMatch[1]) : "") ||
+        (typeof req.query.product === "string" ? req.query.product : "");
+
+      if (requestedProductId && requestedProductId.trim()) {
+        try {
+          const rawHtml = fs.readFileSync(indexFile, "utf-8");
+          const product = await fetchProductForOpenGraph(requestedProductId.trim());
+          const finalHtml = injectProductOpenGraphIntoHtml(rawHtml, product, req);
+          res.status(200).set({ "Content-Type": "text/html" }).send(finalHtml);
+          return;
+        } catch (err) {
+          console.warn("Prod OG injection fallback:", err);
+        }
+      }
+      res.sendFile(indexFile);
     });
   }
 

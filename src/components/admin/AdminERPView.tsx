@@ -194,20 +194,26 @@ export const AdminERPView: React.FC = () => {
     });
   }, [orders, orderSearchQuery, orderStatusFilter, paymentStatusFilter]);
 
-  // Filtered Products for Inventory
+  // Filtered Products for Inventory (sorted most-recently updated first for admin convenience)
   const filteredProducts = useMemo(() => {
-    return products.filter((prod) => {
-      const q = productSearchQuery.toLowerCase().trim();
-      const matchesSearch = 
-        !q ||
-        prod.nameEn.toLowerCase().includes(q) ||
-        prod.nameBn.includes(q) ||
-        prod.id.toLowerCase().includes(q) ||
-        prod.brand.toLowerCase().includes(q);
+    return products
+      .filter((prod) => {
+        const q = productSearchQuery.toLowerCase().trim();
+        const matchesSearch =
+          !q ||
+          prod.nameEn.toLowerCase().includes(q) ||
+          prod.nameBn.includes(q) ||
+          prod.id.toLowerCase().includes(q) ||
+          prod.brand.toLowerCase().includes(q);
 
-      const matchesCat = productCategoryFilter === 'all' || prod.category === productCategoryFilter;
-      return matchesSearch && matchesCat;
-    });
+        const matchesCat = productCategoryFilter === 'all' || prod.category === productCategoryFilter;
+        return matchesSearch && matchesCat;
+      })
+      .sort((a, b) => {
+        const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime() || 0;
+        const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime() || 0;
+        return timeB - timeA;
+      });
   }, [products, productSearchQuery, productCategoryFilter]);
 
   // Handle Order Payment Verification
@@ -326,8 +332,6 @@ export const AdminERPView: React.FC = () => {
       gallery: [],
       inStock: true,
       stockCount: 20,
-      rating: 4.9,
-      reviewsCount: 12,
       badge: 'new',
       warrantyEn: '2 Years Official Luxora Warranty',
       warrantyBn: '২ বছরের অফিসিয়াল লাক্সোরা ওয়ারেন্টি',
@@ -526,6 +530,9 @@ export const AdminERPView: React.FC = () => {
         });
       } else {
         const newProdId = productFormData.id || `lux-prod-${Date.now().toString(36)}`;
+        const { rating: randomizedRating, reviewsCount: randomizedReviewsCount } =
+          productService.generateRandomizedRatingMetrics(products);
+
         const saved = await productService.addProduct({
           ...productFormData,
           id: newProdId,
@@ -536,6 +543,8 @@ export const AdminERPView: React.FC = () => {
           originalPrice: Number(productFormData.originalPrice) || parsedPrice,
           stockCount: Number(productFormData.stockCount) || 10,
           inStock: (Number(productFormData.stockCount) || 0) > 0,
+          rating: randomizedRating,
+          reviewsCount: randomizedReviewsCount,
         });
 
         // Immediately update React context state so new item appears instantly without refresh

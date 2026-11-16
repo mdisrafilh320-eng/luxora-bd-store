@@ -17,10 +17,20 @@ import {
   ChevronLeft, 
   ChevronRight, 
   PackageCheck, 
-  AlertCircle 
+  AlertCircle,
+  Share2,
+  Link2,
+  Check,
+  MessageCircle
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatBDT } from '../../translations';
+import {
+  shareProductWithNativeAPI,
+  copyTextToClipboard,
+  getProductShareUrl,
+  buildSocialShareLinks,
+} from '../../services/shareService';
 
 interface ReviewItem {
   id: string;
@@ -53,9 +63,12 @@ export const ProductDetailModal: React.FC = () => {
   const [selectedVariant, setSelectedVariant] = useState<string | undefined>(undefined);
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState<'specs' | 'reviews' | 'warranty'>('specs');
+  const [isLinkCopied, setIsLinkCopied] = useState(false);
+  const [isShareMenuOpen, setIsShareMenuOpen] = useState(false);
 
   const modalOverlayRef = useRef<HTMLDivElement | null>(null);
   const savedScrollYRef = useRef<number | null>(null);
+  const copyTimerRef = useRef<number | null>(null);
 
   // Customer Reviews State
   const [reviews, setReviews] = useState<ReviewItem[]>([
@@ -132,6 +145,8 @@ export const ProductDetailModal: React.FC = () => {
       setSelectedVariant(firstVariant);
       setQuantity(1);
       setActiveTab('specs');
+      setIsLinkCopied(false);
+      setIsShareMenuOpen(false);
       if (modalOverlayRef.current) {
         modalOverlayRef.current.scrollTop = 0;
       }
@@ -193,8 +208,64 @@ export const ProductDetailModal: React.FC = () => {
     : 0;
 
   const handleCloseModal = () => {
+    setIsShareMenuOpen(false);
     setQuickViewProduct(null);
   };
+
+  const handleCopyProductLink = async (silentToast = false) => {
+    const shareUrl = getProductShareUrl(product.id);
+    const copied = await copyTextToClipboard(shareUrl);
+    if (copied) {
+      setIsLinkCopied(true);
+      if (copyTimerRef.current) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+      copyTimerRef.current = window.setTimeout(() => setIsLinkCopied(false), 2600);
+
+      if (!silentToast) {
+        addToast({
+          type: 'success',
+          titleEn: 'Link Copied!',
+          titleBn: 'লিঙ্ক কপি হয়েছে!',
+          descriptionEn: 'Share this link directly on Messenger, WhatsApp, Instagram, or TikTok.',
+          descriptionBn: 'মেসেঞ্জার, হোয়াটসঅ্যাপ, ইনস্টাগ্রাম বা টিকটকে সরাসরি পেস্ট করে শেয়ার করুন।',
+        });
+      }
+    } else {
+      addToast({
+        type: 'error',
+        titleEn: 'Copy Failed',
+        titleBn: 'কপি করা যায়নি',
+        descriptionEn: 'Please copy the URL from your browser address bar.',
+        descriptionBn: 'দয়া করে ব্রাউজার অ্যাড্রেস বার থেকে লিংকটি কপি করুন।',
+      });
+    }
+  };
+
+  const handleNativeShare = async () => {
+    const result = await shareProductWithNativeAPI(product, language);
+    if (result === 'shared') {
+      addToast({
+        type: 'success',
+        titleEn: 'Shared Successfully',
+        titleBn: 'শেয়ার সম্পন্ন হয়েছে',
+        descriptionEn: `${primaryTitle} link shared.`,
+        descriptionBn: `${primaryTitle} শেয়ার করা হয়েছে।`,
+      });
+      return;
+    }
+
+    if (result === 'aborted') {
+      return;
+    }
+
+    // Fallback for desktop or browsers without navigator.share support:
+    // Copy link with "Link Copied!" toast AND open quick social share options
+    await handleCopyProductLink(false);
+    setIsShareMenuOpen((prev) => !prev);
+  };
+
+  const socialShareUrls = buildSocialShareLinks(product, language);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     setTouchStartX(e.targetTouches[0].clientX);
@@ -315,25 +386,133 @@ export const ProductDetailModal: React.FC = () => {
             {/* Top gold accent line */}
             <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-[#D4AF37] via-[#E5C158] to-[#1E1E24]" />
 
-            {/* Top Navigation Strip: Back to Catalog & Close */}
-            <div className="flex items-center justify-between gap-3 pb-3 sm:pb-4 mb-4 sm:mb-5 border-b border-[#1E1E24]">
+            {/* Top Navigation Strip: Back to Catalog, Share, Copy Link & Close */}
+            <div className="flex items-center justify-between gap-2 sm:gap-3 pb-3 sm:pb-4 mb-4 sm:mb-5 border-b border-[#1E1E24] relative">
               <button
                 type="button"
                 onClick={handleCloseModal}
-                className="min-h-[44px] inline-flex items-center gap-2 text-xs font-semibold text-gray-300 hover:text-[#D4AF37] transition-colors py-2 px-3 -ml-2 rounded-xl hover:bg-white/5 cursor-pointer"
+                className="min-h-[44px] inline-flex items-center gap-1.5 sm:gap-2 text-xs font-semibold text-gray-300 hover:text-[#D4AF37] transition-colors py-2 px-2.5 sm:px-3 -ml-2 rounded-xl hover:bg-white/5 cursor-pointer"
               >
-                <ArrowLeft className="w-4 h-4" />
-                <span>{language === 'bn' ? 'শপ ক্যাটালগে ফিরে যান' : 'Back to Shop Catalog'}</span>
+                <ArrowLeft className="w-4 h-4 shrink-0" />
+                <span className="truncate">{language === 'bn' ? 'শপে ফিরে যান' : 'Back to Catalog'}</span>
               </button>
 
-              <button
-                type="button"
-                onClick={handleCloseModal}
-                className="min-w-[44px] min-h-[44px] -mr-2 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
-                aria-label="Close product modal"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                {/* Copy Link Button */}
+                <button
+                  type="button"
+                  onClick={() => handleCopyProductLink(false)}
+                  className={`min-h-[40px] px-2.5 sm:px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+                    isLinkCopied
+                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                      : 'bg-white/[0.04] hover:bg-white/[0.08] border-white/10 text-gray-200 hover:text-[#D4AF37]'
+                  }`}
+                  aria-label={language === 'bn' ? 'লিংক কপি করুন' : 'Copy Link'}
+                >
+                  {isLinkCopied ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  ) : (
+                    <Link2 className="w-3.5 h-3.5 shrink-0" />
+                  )}
+                  <span className="hidden xs:inline sm:inline">
+                    {isLinkCopied
+                      ? language === 'bn'
+                        ? 'লিঙ্ক কপি হয়েছে!'
+                        : 'Link Copied!'
+                      : language === 'bn'
+                      ? 'লিংক কপি'
+                      : 'Copy Link'}
+                  </span>
+                </button>
+
+                {/* Universal Native Share Button */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={handleNativeShare}
+                    className="min-h-[40px] px-3 sm:px-4 py-2 rounded-xl text-xs font-bold bg-[#D4AF37]/15 hover:bg-[#D4AF37]/25 border border-[#D4AF37]/40 text-[#D4AF37] transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                    aria-label={language === 'bn' ? 'প্রোডাক্ট শেয়ার করুন' : 'Share product'}
+                  >
+                    <Share2 className="w-3.5 h-3.5 shrink-0" />
+                    <span>{language === 'bn' ? 'শেয়ার' : 'Share'}</span>
+                  </button>
+
+                  {/* Desktop / Unsupported Browser Quick Social Share Popover */}
+                  {isShareMenuOpen && (
+                    <div className="absolute right-0 top-12 w-60 rounded-2xl bg-[#14151B] border border-[#D4AF37]/35 shadow-2xl p-3 z-50 space-y-2 animate-scaleUp">
+                      <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-[#D4AF37]">
+                          {language === 'bn' ? 'সরাসরি শেয়ার করুন' : 'Quick Share'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsShareMenuOpen(false)}
+                          className="text-gray-400 hover:text-white p-0.5 cursor-pointer"
+                          aria-label="Close share options"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <a
+                        href={socialShareUrls.whatsapp}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 text-emerald-300 text-xs font-semibold transition-colors"
+                      >
+                        <MessageCircle className="w-4 h-4 shrink-0" />
+                        <span>WhatsApp</span>
+                      </a>
+
+                      <a
+                        href={socialShareUrls.facebook}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 text-blue-300 text-xs font-semibold transition-colors"
+                      >
+                        <Share2 className="w-4 h-4 shrink-0" />
+                        <span>Facebook</span>
+                      </a>
+
+                      <a
+                        href={socialShareUrls.telegram}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/25 text-sky-300 text-xs font-semibold transition-colors"
+                      >
+                        <Send className="w-4 h-4 shrink-0" />
+                        <span>Telegram</span>
+                      </a>
+
+                      <button
+                        type="button"
+                        onClick={() => handleCopyProductLink(false)}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-200 text-xs font-semibold transition-colors cursor-pointer text-left"
+                      >
+                        {isLinkCopied ? (
+                          <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                        ) : (
+                          <Link2 className="w-4 h-4 text-[#D4AF37] shrink-0" />
+                        )}
+                        <span>
+                          {language === 'bn'
+                            ? 'Messenger / Instagram-এর জন্য কপি'
+                            : 'Copy for Messenger / IG / TikTok'}
+                        </span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleCloseModal}
+                  className="min-w-[40px] min-h-[40px] -mr-1.5 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
+                  aria-label="Close product modal"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Main PDP Grid */}
@@ -860,6 +1039,17 @@ export const ProductDetailModal: React.FC = () => {
                     aria-label="Wishlist"
                   >
                     <Heart className={`w-4 h-4 ${isWishlisted ? 'fill-black' : ''}`} />
+                  </button>
+
+                  {/* Quick Share Button */}
+                  <button
+                    type="button"
+                    onClick={handleNativeShare}
+                    className="min-w-[44px] min-h-[44px] rounded-full border border-white/10 slate-bg text-gray-300 hover:text-[#D4AF37] hover:border-[#D4AF37]/50 flex items-center justify-center transition-all cursor-pointer active:scale-95"
+                    aria-label={language === 'bn' ? 'শেয়ার করুন' : 'Share product'}
+                    title={language === 'bn' ? 'শেয়ার করুন' : 'Share product'}
+                  >
+                    <Share2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>

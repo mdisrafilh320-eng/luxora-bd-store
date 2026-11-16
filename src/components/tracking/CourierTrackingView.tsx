@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Order, OrderStatus } from '../../types';
-import { orderService, searchOrdersForTracking, getSampleTrackingOrder } from '../../services/orderService';
+import { searchOrdersForTracking, subscribeToUserOrders } from '../../services/orderService';
 import { fetchLiveCourierTracking, LiveCourierDetails } from '../../services/courierService';
 import { OrderTrackingTimeline } from './OrderTrackingTimeline';
 import { formatBDT } from '../../translations';
@@ -40,31 +40,79 @@ export const CourierTrackingView: React.FC<CourierTrackingViewProps> = ({
   initialOrderId,
   onBackToStore,
 }) => {
-  const { language, t, setActiveView, user, addToast } = useApp();
+  const { language, setActiveView, user, isAdmin, setIsAuthModalOpen, addToast } = useApp();
 
   const [searchInput, setSearchInput] = useState(initialOrderId || '');
   const [isSearching, setIsSearching] = useState(false);
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
+  const [myOrders, setMyOrders] = useState<Order[]>([]);
   const [courierDetails, setCourierDetails] = useState<LiveCourierDetails | null>(null);
   const [copiedConsignment, setCopiedConsignment] = useState(false);
   const [copiedTrackingLink, setCopiedTrackingLink] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
+  // Real-time UID-isolated subscription for logged-in user's own orders
+  useEffect(() => {
+    if (!user || user.isGuest) {
+      setMyOrders([]);
+      return;
+    }
+
+    const unsubscribe = subscribeToUserOrders((orders) => {
+      setMyOrders(orders);
+      if (!currentOrder && !initialOrderId && orders.length > 0) {
+        handleSelectOwnedOrder(orders[0]);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [user?.id, user?.isGuest]);
+
   useEffect(() => {
     if (initialOrderId) {
+      setSearchInput(initialOrderId);
       handleSearch(initialOrderId);
     }
-  }, [initialOrderId]);
+  }, [initialOrderId, user?.id]);
+
+  const handleSelectOwnedOrder = async (order: Order) => {
+    setCurrentOrder(order);
+    setSearchInput(order.id);
+    setHasSearched(true);
+    try {
+      const courierData = await fetchLiveCourierTracking(
+        order.trackingInfo?.consignmentId || order.trackingInfo?.trackingNumber || 'STDF-PENDING',
+        order.trackingInfo?.courier?.toLowerCase().includes('pathao') ? 'pathao' : 'steadfast'
+      );
+      setCourierDetails(courierData);
+    } catch {
+      setCourierDetails(null);
+    }
+  };
 
   const handleSearch = async (queryText?: string) => {
     const q = (queryText || searchInput).trim();
     if (!q) return;
 
+    if (!user || user.isGuest) {
+      setHasSearched(true);
+      setCurrentOrder(null);
+      setIsAuthModalOpen(true);
+      addToast({
+        type: 'info',
+        titleEn: 'Sign In Required',
+        titleBn: 'লগইন প্রয়োজন',
+        descriptionEn: 'Please sign in to securely view and track your personal orders.',
+        descriptionBn: 'আপনার ব্যক্তিগত অর্ডার ট্র্যাক করতে অনুগ্রহ করে লগইন করুন।',
+      });
+      return;
+    }
+
     setIsSearching(true);
     setHasSearched(true);
 
     try {
-      const foundOrder = await searchOrdersForTracking(q);
+      const foundOrder = await searchOrdersForTracking(q, isAdmin);
       if (foundOrder) {
         setCurrentOrder(foundOrder);
         // Load live courier details
@@ -194,13 +242,36 @@ export const CourierTrackingView: React.FC<CourierTrackingViewProps> = ({
             </button>
           </div>
 
-          {/* Tracking instructions */}
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[#1C1C26] text-xs text-gray-400">
+          {/* Tracking instructions + Quick selector for logged-in user's own orders */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#1C1C26] text-xs text-gray-400">
             <span className="text-[11px] font-sans">
-              {language === 'bn' 
-                ? 'চেকআউট সম্পন্ন করার পর প্রাপ্ত Order ID (যেমন: LUX-XXXXXX) বা মোবাইল নম্বর দিয়ে সার্চ করুন।' 
-                : 'Enter your Luxora BD Order ID (e.g. LUX-XXXXXX) or billing mobile number to track live status.'}
+              {user && !user.isGuest
+                ? language === 'bn'
+                  ? 'আপনার নিজস্ব অর্ডারসমূহের Order ID দিয়ে লাইভ ডেলিভারি স্ট্যাটাস দেখুন।'
+                  : 'Track live delivery progress strictly for orders belonging to your account.'
+                : language === 'bn'
+                ? 'অর্ডার ট্র্যাক করতে অনুগ্রহ করে আপনার অ্যাকাউন্টে লগইন করুন।'
+                : 'Sign in to securely view real-time delivery status for your orders.'}
             </span>
+
+            {myOrders.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {myOrders.slice(0, 4).map((ord) => (
+                  <button
+                    key={ord.id}
+                    type="button"
+                    onClick={() => handleSelectOwnedOrder(ord)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition-all cursor-pointer border ${
+                      currentOrder?.id === ord.id
+                        ? 'bg-[#D4AF37] text-black font-bold border-[#D4AF37]'
+                        : 'bg-[#181922] text-gray-300 border-[#282936] hover:border-[#D4AF37]/50'
+                    }`}
+                  >
+                    {ord.id}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

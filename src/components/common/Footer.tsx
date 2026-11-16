@@ -11,6 +11,7 @@ export const Footer: React.FC = () => {
     categories,
     returnPolicy,
     setIsReturnPolicyModalOpen,
+    isAdmin,
   } = useApp();
 
   const topCategories = (categories || []).filter((c) => c.isActive !== false).slice(0, 3);
@@ -123,19 +124,21 @@ export const Footer: React.FC = () => {
                   </button>
                 </li>
               ))}
-              <li>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveView('admin');
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                  className="min-h-[38px] py-1 text-[#D4AF37] hover:underline font-semibold inline-flex items-center gap-1.5 cursor-pointer"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>{language === 'bn' ? 'অ্যাডমিন প্যানেল (ERP)' : 'Enterprise Admin ERP'}</span>
-                </button>
-              </li>
+              {isAdmin && (
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveView('admin');
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="min-h-[38px] py-1 text-[#D4AF37] hover:underline font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>{language === 'bn' ? 'অ্যাডমিন প্যানেল (ERP)' : 'Enterprise Admin ERP'}</span>
+                  </button>
+                </li>
+              )}
             </ul>
           </div>
 
