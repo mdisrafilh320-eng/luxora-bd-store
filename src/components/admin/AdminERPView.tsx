@@ -38,7 +38,9 @@ import {
   MapPin,
   Wand2,
   ListChecks,
-  Loader2
+  Loader2,
+  Bot,
+  Webhook
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Order, Product, OrderStatus, PaymentStatus, ProductCategory, ProductSpec } from '../../types';
@@ -56,10 +58,12 @@ import { sanitizeInput, validateBangladeshiPhone, validateMfsTransactionId } fro
 import { PaymentSettingsTab } from './PaymentSettingsTab';
 import { AdminManagementTab } from './AdminManagementTab';
 import { StorefrontSettingsTab } from './StorefrontSettingsTab';
+import { OmnichannelSalesInboxTab } from './OmnichannelSalesInboxTab';
+import { OmnichannelSettingsTab } from './OmnichannelSettingsTab';
 import { ProductImageUploader } from './ProductImageUploader';
 import { PRIMARY_SUPER_ADMIN_EMAIL } from '../../services/adminRbacService';
 
-type AdminTab = 'overview' | 'orders' | 'inventory' | 'storefront_cms' | 'finance' | 'payment_settings' | 'team_rbac' | 'security';
+type AdminTab = 'overview' | 'ai_sales_inbox' | 'omnichannel_settings' | 'orders' | 'inventory' | 'storefront_cms' | 'finance' | 'payment_settings' | 'team_rbac' | 'security';
 
 export const AdminERPView: React.FC = () => {
   const { 
@@ -78,11 +82,18 @@ export const AdminERPView: React.FC = () => {
     logout,
     setActiveView 
   } = useApp();
-  
+
+  const canManageOperations = isSuperAdmin || adminRole !== 'staff';
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  useEffect(() => {
+    if (!canManageOperations && (activeTab === 'team_rbac' || activeTab === 'payment_settings')) {
+      setActiveTab('overview');
+    }
+  }, [activeTab, canManageOperations]);
 
   // Search & Filters for Orders
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
@@ -135,8 +146,13 @@ export const AdminERPView: React.FC = () => {
   const [productSearchQuery, setProductSearchQuery] = useState('');
   const [productCategoryFilter, setProductCategoryFilter] = useState<string>('all');
 
-  // Load live orders on mount
+  // Load live orders for ERP Dashboard
   const fetchAllOrders = async () => {
+    if (!isAdmin) {
+      setOrders([]);
+      setIsLoadingOrders(false);
+      return;
+    }
     setIsLoadingOrders(true);
     try {
       const data = await orderService.getAllOrders();
@@ -150,19 +166,27 @@ export const AdminERPView: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchAllOrders();
-  }, []);
+    if (isAdmin) {
+      fetchAllOrders();
+    } else {
+      setOrders([]);
+      setIsLoadingOrders(false);
+    }
+  }, [isAdmin]);
 
   const handleRefreshAll = async () => {
     setIsRefreshing(true);
-    await Promise.all([fetchAllOrders(), refreshProducts()]);
+    await Promise.all([
+      fetchAllOrders(),
+      refreshProducts(),
+    ]);
     setIsRefreshing(false);
     addToast({
       type: 'info',
-      titleEn: 'ERP Data Synchronized',
-      titleBn: 'ইআরপি ডাটা সিঙ্ক সম্পন্ন',
-      descriptionEn: 'Latest orders, stock levels, and ledger updated',
-      descriptionBn: 'সর্বশেষ অর্ডার, স্টক এবং লেজার তথ্য আপডেট হয়েছে',
+      titleEn: 'Workspace Synchronized',
+      titleBn: 'ডাটা সিঙ্ক সম্পন্ন হয়েছে',
+      descriptionEn: 'Latest orders, stock levels, and inventory updated',
+      descriptionBn: 'সর্বশেষ অর্ডার ও ইনভেন্টরি তথ্য আপডেট হয়েছে',
     });
   };
 
@@ -641,7 +665,7 @@ export const AdminERPView: React.FC = () => {
             <div className="flex items-center gap-3">
               <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider bg-[#D4AF37]/15 text-[#D4AF37] border border-[#D4AF37]/30 flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5" />
-                Enterprise ERP Control Center
+                Luxora BD Admin Control Center
               </span>
               <span className="inline-flex items-center gap-1 text-xs text-emerald-400 font-medium">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -649,28 +673,35 @@ export const AdminERPView: React.FC = () => {
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-display font-semibold tracking-tight text-[#FAF9F6]">
-              {language === 'bn' ? 'লাক্সোরা বিডি এন্টারপ্রাইজ অ্যাডমিন পোর্টাল' : 'Luxora BD Executive Control & ERP'}
+              {language === 'bn'
+                ? 'লাক্সোরা বিডি অ্যাডমিন প্যানেল'
+                : 'Luxora BD Admin Panel'}
             </h1>
             <p className="text-xs sm:text-sm text-neutral-400">
-              {language === 'bn' 
-                ? 'রিয়েল-টাইম অর্ডার ভেরিফিকেশন, ইনভেন্টরি ওয়্যারহাউস, ফাইনান্সিয়াল লেজার এবং সাইবার সিকিউরিটি হাব' 
-                : 'Real-time order verification, inventory warehouse, financial ledger, and zero-trust security hub.'}
+              {language === 'bn'
+                ? 'রিয়েল-টাইম অর্ডার ভেরিফিকেশন, ইনভেন্টরি ওয়্যারহাউস, অমনিচ্যানেল এআই ইনবক্স এবং স্টোর ম্যানেজমেন্ট'
+                : 'Real-time order verification, inventory warehouse, AI Sales Inbox & enterprise store control.'}
             </p>
           </div>
 
-          {/* Quick Actions & Role Guard Status */}
+          {/* Quick Actions & Role Badge */}
           <div className="flex flex-wrap items-center gap-3 relative z-10">
-            {/* Authenticated Identity Pill */}
             {isSuperAdmin ? (
               <div className="px-3 py-1.5 rounded-xl bg-[#D4AF37]/15 border border-[#D4AF37]/40 text-[#D4AF37] text-xs font-bold flex items-center gap-1.5 shadow-sm">
                 <Crown className="w-3.5 h-3.5 text-[#D4AF37]" />
                 <span>Super Admin</span>
                 <span className="text-[10px] text-neutral-400 font-normal font-mono hidden sm:inline">({user?.email || PRIMARY_SUPER_ADMIN_EMAIL})</span>
               </div>
+            ) : adminRole === 'staff' ? (
+              <div className="px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-semibold flex items-center gap-1.5">
+                <Package className="w-3.5 h-3.5" />
+                <span>Fulfillment Staff</span>
+                <span className="text-[10px] text-neutral-400 font-normal font-mono hidden sm:inline">({user?.email})</span>
+              </div>
             ) : (
-              <div className="px-3 py-1.5 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 text-xs font-semibold flex items-center gap-1.5">
+              <div className="px-3 py-1.5 rounded-xl bg-sky-500/15 border border-sky-500/30 text-sky-300 text-xs font-semibold flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5" />
-                <span>{adminRole === 'admin' ? 'Store Admin' : 'Fulfillment Staff'}</span>
+                <span>Store Admin</span>
                 <span className="text-[10px] text-neutral-400 font-normal font-mono hidden sm:inline">({user?.email})</span>
               </div>
             )}
@@ -682,7 +713,7 @@ export const AdminERPView: React.FC = () => {
               className="px-3 py-2 rounded-xl text-xs font-medium bg-[#1A1C24] hover:bg-[#232632] border border-neutral-800 hover:border-[#D4AF37]/40 text-neutral-200 transition-all flex items-center gap-1.5"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-[#D4AF37] ${isRefreshing ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">{language === 'bn' ? 'ডাটা রিফ্রেশ' : 'Sync ERP'}</span>
+              <span className="hidden sm:inline">{language === 'bn' ? 'ডাটা রিফ্রেশ' : 'Sync Data'}</span>
             </button>
 
             <button
@@ -721,6 +752,32 @@ export const AdminERPView: React.FC = () => {
           >
             <TrendingUp className="w-4 h-4" />
             {language === 'bn' ? 'এক্সিকিউটিভ ওভারভিউ' : 'Executive Overview'}
+          </button>
+
+          <button
+            id="admin-tab-ai-sales-inbox"
+            onClick={() => setActiveTab('ai_sales_inbox')}
+            className={`min-h-[44px] px-5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer active:scale-95 ${
+              activeTab === 'ai_sales_inbox'
+                ? 'bg-[#D4AF37] text-black font-semibold shadow-lg shadow-[#D4AF37]/20'
+                : 'bg-[#12141A] text-neutral-300 hover:text-white hover:bg-[#1A1C24] border border-[#D4AF37]/30'
+            }`}
+          >
+            <Bot className="w-4 h-4" />
+            {language === 'bn' ? 'এআই সেলস ইনবক্স' : 'AI Sales Inbox'}
+          </button>
+
+          <button
+            id="admin-tab-omnichannel-settings"
+            onClick={() => setActiveTab('omnichannel_settings')}
+            className={`min-h-[44px] px-5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer active:scale-95 ${
+              activeTab === 'omnichannel_settings'
+                ? 'bg-[#D4AF37] text-black font-semibold shadow-lg shadow-[#D4AF37]/20'
+                : 'bg-[#12141A] text-neutral-300 hover:text-white hover:bg-[#1A1C24] border border-[#D4AF37]/30'
+            }`}
+          >
+            <Webhook className="w-4 h-4" />
+            {language === 'bn' ? 'অমনিচ্যানেল এপিআই সেটিংস' : 'Omnichannel Settings & API'}
           </button>
 
           <button
@@ -785,40 +842,47 @@ export const AdminERPView: React.FC = () => {
             {language === 'bn' ? 'ফাইনান্সিয়াল লেজার ও প্রফিট' : 'Finance & Ledger'}
           </button>
 
-          <button
-            id="admin-tab-payment-settings"
-            onClick={() => setActiveTab('payment_settings')}
-            className={`min-h-[44px] px-5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer active:scale-95 ${
-              activeTab === 'payment_settings'
-                ? 'bg-[#D4AF37] text-black font-semibold shadow-lg shadow-[#D4AF37]/20'
-                : 'bg-[#12141A] text-neutral-400 hover:text-neutral-200 hover:bg-[#1A1C24] border border-neutral-800/60'
-            }`}
-          >
-            <Sliders className="w-4 h-4" />
-            {language === 'bn' ? 'পেমেন্ট গেটওয়ে সেটিংস' : 'Payment Settings'}
-            {!isSuperAdmin && (
-              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] bg-neutral-800 text-neutral-400">
-                <Lock className="w-2.5 h-2.5" />
-                Read-Only
-              </span>
-            )}
-          </button>
+          {canManageOperations && (
+            <button
+              id="admin-tab-payment-settings"
+              onClick={() => setActiveTab('payment_settings')}
+              className={`min-h-[44px] px-5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer active:scale-95 ${
+                activeTab === 'payment_settings'
+                  ? 'bg-[#D4AF37] text-black font-semibold shadow-lg shadow-[#D4AF37]/20'
+                  : 'bg-[#12141A] text-neutral-400 hover:text-neutral-200 hover:bg-[#1A1C24] border border-neutral-800/60'
+              }`}
+            >
+              <Sliders className="w-4 h-4" />
+              {language === 'bn' ? 'পেমেন্ট গেটওয়ে সেটিংস' : 'Payment Settings'}
+              {!isSuperAdmin && (
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] bg-neutral-800 text-neutral-400">
+                  <Lock className="w-2.5 h-2.5" />
+                  Read-Only
+                </span>
+              )}
+            </button>
+          )}
 
-          <button
-            id="admin-tab-team-rbac"
-            onClick={() => setActiveTab('team_rbac')}
-            className={`min-h-[44px] px-5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer active:scale-95 ${
-              activeTab === 'team_rbac'
-                ? 'bg-[#D4AF37] text-black font-semibold shadow-lg shadow-[#D4AF37]/20'
-                : 'bg-[#12141A] text-neutral-400 hover:text-neutral-200 hover:bg-[#1A1C24] border border-neutral-800/60'
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            {language === 'bn' ? 'টিম ও পারমিশন (RBAC)' : 'Team & Access (RBAC)'}
-            {isSuperAdmin && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            )}
-          </button>
+          {canManageOperations && (
+            <button
+              id="admin-tab-team-rbac"
+              onClick={() => setActiveTab('team_rbac')}
+              className={`min-h-[44px] px-5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer active:scale-95 ${
+                activeTab === 'team_rbac'
+                  ? 'bg-[#D4AF37] text-black font-semibold shadow-lg shadow-[#D4AF37]/20'
+                  : 'bg-[#12141A] text-neutral-400 hover:text-neutral-200 hover:bg-[#1A1C24] border border-neutral-800/60'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              {language === 'bn' ? 'অ্যাডমিন ও টিম ম্যানেজমেন্ট' : 'Admin & Team Access'}
+              {!isSuperAdmin && (
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] bg-neutral-800 text-neutral-400">
+                  <Lock className="w-2.5 h-2.5" />
+                  Read-Only
+                </span>
+              )}
+            </button>
+          )}
 
           <button
             id="admin-tab-security"
@@ -830,7 +894,7 @@ export const AdminERPView: React.FC = () => {
             }`}
           >
             <Lock className="w-4 h-4" />
-            {language === 'bn' ? 'সাইবার সিকিউরিটি ও আরবিক' : 'Security & RBAC'}
+            {language === 'bn' ? 'সাইবার সিকিউরিটি ও প্রোটেকশন' : 'Security & Protection'}
           </button>
         </div>
 
@@ -1430,14 +1494,16 @@ export const AdminERPView: React.FC = () => {
                             Edit
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteProduct(prod.id, prod.nameEn)}
-                            className="p-1.5 rounded-lg bg-[#1A1C24] hover:bg-rose-500/20 border border-neutral-800 hover:border-rose-500/40 text-neutral-400 hover:text-rose-400 transition-all cursor-pointer"
-                            title="Delete Product"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {canManageOperations && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteProduct(prod.id, prod.nameEn)}
+                              className="p-1.5 rounded-lg bg-[#1A1C24] hover:bg-rose-500/20 border border-neutral-800 hover:border-rose-500/40 text-neutral-400 hover:text-rose-400 transition-all cursor-pointer"
+                              title="Delete Product"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1668,7 +1734,7 @@ export const AdminERPView: React.FC = () => {
         )}
 
         {/* ----------------- TAB 6: MFS PAYMENT GATEWAY SETTINGS ----------------- */}
-        {activeTab === 'payment_settings' && (
+        {activeTab === 'payment_settings' && canManageOperations && (
           <PaymentSettingsTab />
         )}
 
@@ -1677,9 +1743,19 @@ export const AdminERPView: React.FC = () => {
           <StorefrontSettingsTab />
         )}
 
-        {/* ----------------- TAB 8: ENTERPRISE TEAM & ACCESS CONTROL (RBAC) ----------------- */}
-        {activeTab === 'team_rbac' && (
+        {/* ----------------- TAB 8: ENTERPRISE TEAM & ACCESS CONTROL ----------------- */}
+        {activeTab === 'team_rbac' && canManageOperations && (
           <AdminManagementTab />
+        )}
+
+        {/* ----------------- TAB 9: AI SALES INBOX ----------------- */}
+        {activeTab === 'ai_sales_inbox' && (
+          <OmnichannelSalesInboxTab />
+        )}
+
+        {/* ----------------- TAB 10: OMNICHANNEL SETTINGS & API CONFIGURATION ----------------- */}
+        {activeTab === 'omnichannel_settings' && (
+          <OmnichannelSettingsTab />
         )}
 
         {/* ----------------- PAYMENT VERIFICATION & ORDER DETAILS MODAL ----------------- */}
@@ -1806,24 +1882,31 @@ export const AdminERPView: React.FC = () => {
                 </div>
               )}
 
-              {/* Verification Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-neutral-800">
-                <button
-                  onClick={() => handleVerifyPayment(selectedOrderForVerification.id, false)}
-                  className="px-4 py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-400 font-semibold text-xs transition-all flex items-center gap-2"
-                >
-                  <XCircle className="w-4 h-4" />
-                  Reject Payment
-                </button>
+              {/* Verification Buttons (Super Admin & Store Admin) */}
+              {canManageOperations ? (
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-neutral-800">
+                  <button
+                    onClick={() => handleVerifyPayment(selectedOrderForVerification.id, false)}
+                    className="px-4 py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-400 font-semibold text-xs transition-all flex items-center gap-2"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    Reject Payment
+                  </button>
 
-                <button
-                  onClick={() => handleVerifyPayment(selectedOrderForVerification.id, true)}
-                  className="px-5 py-2.5 rounded-xl bg-[#D4AF37] hover:bg-[#C5A028] text-black font-semibold text-xs transition-all flex items-center gap-2 shadow-lg shadow-[#D4AF37]/20"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  Approve & Confirm Order
-                </button>
-              </div>
+                  <button
+                    onClick={() => handleVerifyPayment(selectedOrderForVerification.id, true)}
+                    className="px-5 py-2.5 rounded-xl bg-[#D4AF37] hover:bg-[#C5A028] text-black font-semibold text-xs transition-all flex items-center gap-2 shadow-lg shadow-[#D4AF37]/20"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    Approve & Confirm Order
+                  </button>
+                </div>
+              ) : (
+                <div className="pt-3 border-t border-neutral-800 text-[11px] text-neutral-400 flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Financial MFS payment approval is restricted to Store Admins & Super Admins.</span>
+                </div>
+              )}
             </div>
           </div>
         )}

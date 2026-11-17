@@ -7,7 +7,6 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Global Security Primitives & Helpers
     function isSignedIn() {
       return request.auth != null;
     }
@@ -20,7 +19,18 @@ service cloud.firestore {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_.@\\-]+$');
     }
 
-    function isSuperAdmin() {
+    // Standard 3-Role Admin Helpers:
+    //   - super_admin: Primary Owner / Super Admin
+    //   - admin (or legacy supervisor): Store Admin / Supervisor
+    //   - staff: Fulfillment Staff
+    function docHasRole(data, allowedRoles) {
+      return data.get('active', true) != false && (
+        data.get('role', '') in allowedRoles ||
+        (data.get('isAdmin', false) == true && ('admin' in allowedRoles))
+      );
+    }
+
+    function hasAdminRole(allowedRoles) {
       return isSignedIn() && (
         (request.auth.token.email != null &&
           request.auth.token.email_verified == true &&
@@ -28,108 +38,121 @@ service cloud.firestore {
         (request.auth.token.email != null &&
           request.auth.token.email_verified == true &&
           exists(/databases/$(database)/documents/admins/$(request.auth.token.email.lower())) &&
-          get(/databases/$(database)/documents/admins/$(request.auth.token.email.lower())).data.role == 'super_admin' &&
-          get(/databases/$(database)/documents/admins/$(request.auth.token.email.lower())).data.active != false) ||
+          docHasRole(get(/databases/$(database)/documents/admins/$(request.auth.token.email.lower())).data, allowedRoles)) ||
         (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'super_admin' &&
-          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.active != false)
+          docHasRole(get(/databases/$(database)/documents/admins/$(request.auth.uid)).data, allowedRoles)) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') in allowedRoles)
       );
+    }
+
+    function isSuperAdmin() {
+      return hasAdminRole(['super_admin']);
+    }
+
+    function isManagerOrSuperAdmin() {
+      return hasAdminRole(['super_admin', 'admin', 'supervisor']);
     }
 
     function isAdmin() {
-      return isSuperAdmin() || (
-        isSignedIn() && (
-          (request.auth.token.email != null &&
-            request.auth.token.email_verified == true &&
-            exists(/databases/$(database)/documents/admins/$(request.auth.token.email.lower())) &&
-            get(/databases/$(database)/documents/admins/$(request.auth.token.email.lower())).data.active != false) ||
-          (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
-            get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.active != false) ||
-          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin', 'staff'])
-        )
-      );
+      return hasAdminRole(['super_admin', 'admin', 'supervisor', 'staff']);
     }
 
-    // --- USERS COLLECTION (Strict Owner-Only PII Isolation + Anti-Privilege-Escalation) ---
+    // --- USERS COLLECTION (Owner-Only PII Isolation + Manager/Super Admin Read) ---
     match /users/{userId} {
-      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
-      allow list: if isAdmin();
+      allow get: if isValidId(userId) && (isOwner(userId) || isManagerOrSuperAdmin());
+      allow list: if isManagerOrSuperAdmin();
       allow create: if isValidId(userId) && (
-        isAdmin() ||
+        isSuperAdmin() ||
         (isOwner(userId) && (!('role' in request.resource.data) || request.resource.data.role == 'customer'))
       );
       allow update: if isValidId(userId) && (
-        isAdmin() ||
-        (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'id']))
+        isSuperAdmin() ||
+        (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'role', 'id', 'isAdmin'
+        ]))
       );
       allow delete: if isValidId(userId) && isSuperAdmin();
     }
 
-    // --- PRODUCTS COLLECTION (Public Catalog Read, Strictly Admin-Only Write) ---
+    // --- PRODUCTS COLLECTION (Public Read; Any Admin Create/Update; Manager/Super Admin Delete) ---
     match /products/{productId} {
       allow get: if isValidId(productId);
       allow list: if true;
-      allow create, update, delete: if isValidId(productId) && isAdmin();
+      allow create, update: if isValidId(productId) && isAdmin();
+      allow delete: if isValidId(productId) && isManagerOrSuperAdmin();
     }
 
-    // --- ALIAS LUXORA-PRODUCTS COLLECTION (Public Catalog Read, Strictly Admin-Only Write) ---
+    // --- ALIAS LUXORA-PRODUCTS COLLECTION ---
     match /luxora-products/{productId} {
       allow get: if isValidId(productId);
       allow list: if true;
-      allow create, update, delete: if isValidId(productId) && isAdmin();
+      allow create, update: if isValidId(productId) && isAdmin();
+      allow delete: if isValidId(productId) && isManagerOrSuperAdmin();
     }
 
-    // --- CATEGORIES COLLECTION (Public Taxonomy Read, Strictly Admin-Only Write) ---
+    // --- CATEGORIES COLLECTION (Public Read; Manager/Super Admin Write) ---
     match /categories/{categoryId} {
       allow get: if isValidId(categoryId);
       allow list: if true;
-      allow create, update, delete: if isValidId(categoryId) && isAdmin();
+      allow create, update, delete: if isValidId(categoryId) && isManagerOrSuperAdmin();
     }
 
-    // --- BANNERS COLLECTION (Public Storefront Read, Strictly Admin-Only Write) ---
+    // --- BANNERS COLLECTION (Public Read; Manager/Super Admin Write) ---
     match /banners/{bannerId} {
       allow get: if isValidId(bannerId);
       allow list: if true;
-      allow create, update, delete: if isValidId(bannerId) && isAdmin();
+      allow create, update, delete: if isValidId(bannerId) && isManagerOrSuperAdmin();
     }
 
-    // --- ORDERS COLLECTION (Strict UID Isolation for Customers, Full Access for Admins) ---
+    // --- ORDERS COLLECTION (Admins Full Order Management; Customer UID-Isolated) ---
     match /orders/{orderId} {
       allow get: if isValidId(orderId) && (
         isAdmin() ||
-        (isSignedIn() && resource.data.userId == request.auth.uid)
+        (isSignedIn() && resource.data.get('userId', '') == request.auth.uid)
       );
       allow list: if isAdmin() || (
-        isSignedIn() && resource.data.userId == request.auth.uid
+        isSignedIn() && resource.data.get('userId', '') == request.auth.uid
       );
       allow create: if isValidId(orderId) && (
         isAdmin() ||
-        (isSignedIn() && request.resource.data.userId == request.auth.uid) ||
-        (!isSignedIn() && request.resource.data.userId == 'guest')
+        (isSignedIn() && request.resource.data.get('userId', '') == request.auth.uid) ||
+        (!isSignedIn() && request.resource.data.get('userId', '') == 'guest')
       );
       allow update: if isValidId(orderId) && isAdmin();
-      allow delete: if isValidId(orderId) && isAdmin();
+      allow delete: if isValidId(orderId) && isSuperAdmin();
     }
 
-    // --- ADMINS COLLECTION (Self-Verification Read Only, Strictly Super Admin Writable) ---
+    // --- ADMINS COLLECTION (Self-Check + Store Admin Read-Only Directory; Super Admin Full Control) ---
     match /admins/{adminId} {
       allow get: if isValidId(adminId) && (
-        isAdmin() ||
+        isManagerOrSuperAdmin() ||
         (isSignedIn() && (
           adminId == request.auth.uid ||
           (request.auth.token.email != null && adminId == request.auth.token.email.lower())
         ))
       );
-      allow list: if isAdmin();
+      allow list: if isManagerOrSuperAdmin();
       allow create, update, delete: if isValidId(adminId) && isSuperAdmin();
     }
 
-    // --- SETTINGS COLLECTION (Storefront Config Read, Strictly Admin-Only Write) ---
+    // --- SETTINGS COLLECTION (Public Storefront Read; Super Admin Write/Delete) ---
     match /settings/{settingId} {
       allow get: if isValidId(settingId);
       allow list: if isAdmin();
-      allow create, update, delete: if isValidId(settingId) && isAdmin();
+      allow create, update, delete: if isValidId(settingId) && isSuperAdmin();
+    }
+
+    // --- OMNICHANNEL AI SALES INBOX CONVERSATIONS (Admin Only) ---
+    match /crm_conversations/{conversationId} {
+      allow get, create, update, delete: if isValidId(conversationId) && isAdmin();
+      allow list: if isAdmin();
+    }
+
+    // --- OMNICHANNEL CHANNEL WEBHOOK & API CREDENTIALS (Admin Only) ---
+    match /omnichannel_channels/{channelId} {
+      allow get, create, update, delete: if isValidId(channelId) && isAdmin();
+      allow list: if isAdmin();
     }
   }
 }

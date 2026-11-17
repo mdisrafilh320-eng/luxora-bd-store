@@ -120,7 +120,7 @@
         "uid": { "type": "string", "description": "Auth UID if available" },
         "email": { "type": "string", "maxLength": 150, "description": "Admin email address (canonical lowercase)" },
         "name": { "type": "string", "maxLength": 100, "description": "Admin display name or title" },
-        "role": { "type": "string", "enum": ["super_admin", "admin", "staff"], "description": "Admin role level" },
+        "role": { "type": "string", "enum": ["super_admin", "admin", "staff"], "description": "Standard administrative role" },
         "active": { "type": "boolean", "description": "Whether administrative access is active" },
         "addedBy": { "type": "string", "maxLength": 150, "description": "Email of Super Admin who authorized this user" },
         "createdAt": { "type": "string", "format": "date-time", "description": "Authorization timestamp" },
@@ -166,6 +166,48 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "imageUrl", "order", "isActive"]
+    },
+    "CrmConversation": {
+      "title": "CrmConversation",
+      "description": "Admin-only omnichannel customer sales conversation from Messenger, WhatsApp, Instagram, or TikTok",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "channel": { "type": "string", "enum": ["messenger", "whatsapp", "instagram", "tiktok"] },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string", "maxLength": 120 },
+        "lastMessage": { "type": "string", "maxLength": 2000 },
+        "lastMessageAt": { "type": "string", "format": "date-time" },
+        "unreadCount": { "type": "number" },
+        "status": { "type": "string", "enum": ["open", "negotiating", "ready_to_order", "converted", "resolved"] },
+        "messages": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "channel", "customerName", "status", "messages", "createdAt", "updatedAt"]
+    },
+    "OmnichannelChannel": {
+      "title": "OmnichannelChannel",
+      "description": "Admin-only webhook configuration, API credentials, and auto-reply status for social sales channels",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "handleOrNumber": { "type": "string" },
+        "pageOrBusinessId": { "type": "string" },
+        "wabaId": { "type": "string" },
+        "instagramBusinessId": { "type": "string" },
+        "accessToken": { "type": "string" },
+        "appKey": { "type": "string" },
+        "appSecret": { "type": "string" },
+        "verifyToken": { "type": "string" },
+        "connected": { "type": "boolean" },
+        "autoAiDraft": { "type": "boolean" },
+        "lastWebhookAt": { "type": "string", "format": "date-time" },
+        "lastDispatchStatus": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "label", "connected", "updatedAt"]
     }
   },
   "firestore": {
@@ -196,6 +238,14 @@
     "/settings/{settingId}": {
       "schema": { "$ref": "PaymentSettings" },
       "description": "System-wide payment gateway, return policy, and storefront settings"
+    },
+    "/crm_conversations/{conversationId}": {
+      "schema": { "$ref": "CrmConversation" },
+      "description": "Strictly admin-only omnichannel CRM inbox threads"
+    },
+    "/omnichannel_channels/{channelId}": {
+      "schema": { "$ref": "OmnichannelChannel" },
+      "description": "Strictly admin-only social channel integration configurations"
     }
   }
 }

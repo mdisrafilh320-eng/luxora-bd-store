@@ -33,6 +33,7 @@ export const CatalogHub: React.FC = () => {
     setActiveView,
     reshuffleCatalog,
   } = useApp();
+  const canFullAdmin = isAdmin;
 
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   const [inStockOnly, setInStockOnly] = useState(false);
@@ -330,7 +331,7 @@ export const CatalogHub: React.FC = () => {
               ? 'এই ক্যাটাগরি বা সার্চে কোনো পণ্য পাওয়া যায়নি।'
               : 'No products matched the selected category or search query.'}
           </p>
-          {products.length === 0 && isAdmin ? (
+          {products.length === 0 && canFullAdmin ? (
             <button
               type="button"
               onClick={() => setActiveView('admin')}

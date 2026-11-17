@@ -271,7 +271,7 @@ const MainStoreContent: React.FC = () => {
     setIsAuthModalOpen,
   ]);
 
-  // Sync activeView to browser URL hash/path ONLY for authorized admins
+  // Sync activeView to browser URL hash/path ONLY for verified admins
   useEffect(() => {
     try {
       if (activeView === 'admin' && isAdmin) {
@@ -288,7 +288,7 @@ const MainStoreContent: React.FC = () => {
     if (isAuthLoading || isCheckingAdminStatus) {
       return (
         <div className="min-h-[60vh] flex items-center justify-center p-6 text-xs text-neutral-400">
-          Verifying access permissions...
+          Verifying administrator privileges...
         </div>
       );
     }

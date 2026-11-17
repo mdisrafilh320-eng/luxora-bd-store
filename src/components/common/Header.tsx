@@ -33,9 +33,19 @@ export const Header: React.FC = () => {
     activeView,
     setActiveView,
     isAdmin,
+    isSuperAdmin,
+    adminRole,
     logout,
     categories: dynamicCategories,
   } = useApp();
+
+  const portalLabelEn = 'Admin';
+  const portalLabelBn = 'অ্যাডমিন';
+  const roleBadgeLabel = isSuperAdmin
+    ? 'SUPER ADMIN'
+    : adminRole === 'staff'
+    ? 'FULFILLMENT STAFF'
+    : 'STORE ADMIN';
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -163,7 +173,7 @@ export const Header: React.FC = () => {
                   }`}
                 >
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>ERP</span>
+                  <span>Admin</span>
                 </button>
               )}
             </nav>
@@ -254,10 +264,10 @@ export const Header: React.FC = () => {
                         ? 'bg-[#D4AF37] text-black font-bold border-[#D4AF37] shadow-[0_0_12px_rgba(212,175,55,0.35)]'
                         : 'border-[#D4AF37]/50 bg-[#D4AF37]/10 text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black font-semibold'
                     }`}
-                    title="Enterprise Admin ERP Control Center"
+                    title={portalLabelEn}
                   >
                     <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>{language === 'bn' ? 'অ্যাডমিন প্যানেল' : 'Admin ERP'}</span>
+                    <span>{language === 'bn' ? portalLabelBn : portalLabelEn}</span>
                   </button>
 
                   <button
@@ -345,7 +355,7 @@ export const Header: React.FC = () => {
                 }}
                 className="min-w-[40px] min-h-[40px] sm:min-w-[42px] sm:min-h-[42px] rounded-full flex items-center justify-center transition-all cursor-pointer group hover:bg-white/5"
                 aria-label="User Account"
-                title={user ? `${user.name} (${isAdmin ? 'Admin' : user.membershipTier})` : t('signIn')}
+                title={user ? `${user.name} (${isAdmin ? roleBadgeLabel : user.membershipTier})` : t('signIn')}
               >
                 <div
                   className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border flex items-center justify-center text-[11px] font-bold ${
@@ -379,7 +389,7 @@ export const Header: React.FC = () => {
                       {isAdmin ? (
                         <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-[#D4AF37] text-black flex items-center gap-1">
                           <ShieldCheck className="w-2.5 h-2.5" />
-                          ADMIN ACCESS
+                          {roleBadgeLabel}
                         </span>
                       ) : (
                         <span className="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider slate-bg border border-white/10 text-gray-300">
@@ -402,10 +412,10 @@ export const Header: React.FC = () => {
                     >
                       <div className="flex items-center gap-2">
                         <ShieldCheck className="w-4 h-4" />
-                        <span>Admin Control Center</span>
+                        <span>{portalLabelEn}</span>
                       </div>
                       <span className="text-[9px] font-extrabold uppercase bg-black text-[#D4AF37] px-1.5 py-0.5 rounded">
-                        ERP
+                        Admin
                       </span>
                     </button>
                   )}
@@ -560,7 +570,7 @@ export const Header: React.FC = () => {
                         }`}
                       >
                         <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-                        <span>{language === 'bn' ? 'ইআরপি অ্যাডমিন' : 'ERP Admin'}</span>
+                        <span>{language === 'bn' ? portalLabelBn : portalLabelEn}</span>
                       </button>
 
                       <button

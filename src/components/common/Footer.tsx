@@ -135,7 +135,7 @@ export const Footer: React.FC = () => {
                     className="min-h-[38px] py-1 text-[#D4AF37] hover:underline font-semibold inline-flex items-center gap-1.5 cursor-pointer"
                   >
                     <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>{language === 'bn' ? 'অ্যাডমিন প্যানেল (ERP)' : 'Enterprise Admin ERP'}</span>
+                    <span>{language === 'bn' ? 'অ্যাডমিন প্যানেল' : 'Admin Panel'}</span>
                   </button>
                 </li>
               )}

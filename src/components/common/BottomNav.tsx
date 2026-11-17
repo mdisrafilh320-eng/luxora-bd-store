@@ -125,14 +125,14 @@ export const BottomNav: React.FC = () => {
           className={`relative min-h-[48px] flex flex-col items-center justify-center gap-1 py-1 cursor-pointer transition-colors active:scale-95 ${
             activeView === 'admin' ? 'text-[#D4AF37] font-bold' : 'text-[#D4AF37]/80 hover:text-[#D4AF37]'
           }`}
-          title="Admin ERP"
+          title="Admin"
         >
           {activeView === 'admin' && (
             <span className="absolute top-0 w-6 h-0.5 rounded-full bg-[#D4AF37]" aria-hidden="true" />
           )}
           <ShieldCheck className="w-5 h-5 text-[#D4AF37]" />
           <span className="text-[10px] font-bold text-[#D4AF37] tracking-tight font-sans truncate max-w-full px-1">
-            {language === 'bn' ? 'ইআরপি' : 'Admin'}
+            {language === 'bn' ? 'অ্যাডমিন' : 'Admin'}
           </span>
         </button>
       ) : (

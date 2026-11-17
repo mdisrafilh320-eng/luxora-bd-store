@@ -108,6 +108,7 @@ export interface SavedDeliveryInfo {
 
 export type UserRole = 'customer' | 'admin';
 export type AdminRole = 'super_admin' | 'admin' | 'staff';
+
 export type MembershipTier = 'Standard' | 'Gold' | 'Platinum' | 'VIP Noir';
 
 export interface UserProfile {
@@ -252,3 +253,65 @@ export interface ToastMessage {
   descriptionEn?: string;
   descriptionBn?: string;
 }
+
+export type SocialChannel = 'messenger' | 'whatsapp' | 'instagram' | 'tiktok';
+
+export interface ChannelConnectionConfig {
+  id: SocialChannel;
+  label: string;
+  handleOrNumber: string;
+  pageOrBusinessId?: string;
+  wabaId?: string;
+  instagramBusinessId?: string;
+  accessToken?: string;
+  appKey?: string;
+  appSecret?: string;
+  verifyToken?: string;
+  connected: boolean;
+  autoAiDraft: boolean;
+  lastWebhookAt?: string;
+  lastDispatchStatus?: string;
+  updatedAt: string;
+}
+
+export interface CrmMessage {
+  id: string;
+  sender: 'customer' | 'admin' | 'ai_assistant';
+  text: string;
+  imageUrl?: string;
+  matchedProductIds?: string[];
+  visualAnalysis?: string;
+  urgencyAngle?: string;
+  timestamp: string;
+}
+
+export interface CrmConversation {
+  id: string;
+  channel: SocialChannel;
+  customerId: string;
+  customerName: string;
+  customerHandle?: string;
+  customerPhone?: string;
+  customerAvatar?: string;
+  lastMessage: string;
+  lastMessageAt: string;
+  unreadCount: number;
+  status: 'open' | 'negotiating' | 'ready_to_order' | 'converted' | 'resolved';
+  detectedLanguage?: Language;
+  matchedProductIds?: string[];
+  messages: CrmMessage[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SalesCopilotResult {
+  salesReply: string;
+  salesReplyAlternate?: string;
+  detectedLanguage: Language;
+  customerIntent: string;
+  urgencyAngle: string;
+  visualAnalysis?: string;
+  matchedProducts: Product[];
+  provider: string;
+}
+

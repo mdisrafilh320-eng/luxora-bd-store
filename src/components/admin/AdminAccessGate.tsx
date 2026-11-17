@@ -35,8 +35,8 @@ export const AdminAccessGate: React.FC = () => {
             ? 'Please sign in with an authorized administrator account.'
             : 'You do not have administrator permissions to view this area.',
           descriptionBn: !isLoggedIn || user?.isGuest
-            ? 'অ্যাডমিন প্যানেলে প্রবেশ করতে অনুমোদিত অ্যাকাউন্ট দিয়ে লগইন করুন।'
-            : 'এই পেজটি দেখার জন্য আপনার অ্যাডমিন অনুমতি নেই।',
+            ? 'অ্যাডমিন প্যানেলে প্রবেশ করতে অ্যাডমিন অ্যাকাউন্ট দিয়ে লগইন করুন।'
+            : 'এই পেজটি দেখার জন্য আপনার অ্যাডমিন অনুমোদন নেই।',
         });
         if (!isLoggedIn || user?.isGuest) {
           setIsAuthModalOpen(true);
@@ -49,7 +49,7 @@ export const AdminAccessGate: React.FC = () => {
     }
   }, [isAuthLoading, isCheckingAdminStatus, isLoggedIn, user, isAdmin, setActiveView, setIsAuthModalOpen, addToast]);
 
-  // Brief verification state while RBAC resolves
+  // Brief verification state while Firebase RBAC resolves
   if (isAuthLoading || isCheckingAdminStatus) {
     return (
       <div className="min-h-screen bg-[#08090C] flex flex-col items-center justify-center p-6 text-white">
@@ -59,7 +59,7 @@ export const AdminAccessGate: React.FC = () => {
           </div>
         </div>
         <h2 className="text-lg font-display font-semibold text-[#FAF9F6] tracking-wide mb-1">
-          {language === 'bn' ? 'অ্যাক্সেস যাচাই করা হচ্ছে...' : 'Verifying Access...'}
+          {language === 'bn' ? 'অ্যাডমিন অনুমোদন যাচাই করা হচ্ছে...' : 'Verifying Administrator Privileges...'}
         </h2>
       </div>
     );

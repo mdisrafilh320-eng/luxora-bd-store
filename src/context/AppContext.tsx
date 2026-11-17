@@ -14,7 +14,10 @@ import {
   CategoryItem,
   ReturnPolicyConfig
 } from '../types';
-import { adminRbacService, isSuperAdminEmail, PRIMARY_SUPER_ADMIN_EMAIL } from '../services/adminRbacService';
+import {
+  adminRbacService,
+  isSuperAdminEmail,
+} from '../services/adminRbacService';
 import { translations } from '../translations';
 import { mockProducts } from '../data/mockProducts';
 import { auth, validateFirestoreConnection } from '../lib/firebase';
@@ -120,7 +123,7 @@ interface AppContextType {
   setTrackingOrderId: (orderId: string) => void;
   cartItemsCount: number;
 
-  // Enterprise Admin RBAC
+  // Standard Admin RBAC (Super Admin, Store Admin / Supervisor, Fulfillment Staff)
   isAdmin: boolean;
   isSuperAdmin: boolean;
   adminRole: AdminRole | null;
@@ -533,7 +536,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeView, setActiveView] = useState<'store' | 'checkout' | 'track' | 'support' | 'design-system' | 'account' | 'admin'>('store');
   const [trackingOrderId, setTrackingOrderId] = useState<string>('');
 
-  // Enterprise Admin RBAC State (never trust cached localStorage before live Firebase Auth verification)
+  // Standard Admin RBAC Verification (Super Admin, Store Admin / Supervisor, Fulfillment Staff)
   const [adminRole, setAdminRole] = useState<AdminRole | null>(null);
   const [isAdmin, setIsAdminState] = useState<boolean>(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false);
@@ -573,9 +576,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsCheckingAdminStatus(true);
     try {
       const res = await adminRbacService.verifyAdminAccess(verifiedEmail, fbUser.uid);
-      setIsAdminState(res.isAuthorized);
+      setIsAdminState(res.isAdmin);
       setIsSuperAdmin(res.isSuperAdmin);
-      setAdminRole(res.isAuthorized ? (res.role as AdminRole) : null);
+      setAdminRole(res.isAdmin && res.role !== 'none' ? res.role : null);
     } catch (err) {
       console.warn('Error verifying admin authorization:', err);
       setIsAdminState(false);
@@ -595,12 +598,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const setIsAdmin = (value: boolean) => {
-    if (!isSuperAdmin && !isAdmin) {
+    if (!isAdmin) {
       addToast({
         type: 'error',
         titleEn: 'Access Denied',
         titleBn: 'অ্যাক্সেস ডিনাইড',
-        descriptionEn: 'Administrator privileges are required.',
+        descriptionEn: 'Admin privileges are required.',
         descriptionBn: 'অ্যাডমিন অনুমোদন প্রয়োজন।',
       });
       return;

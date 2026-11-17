@@ -1,6 +1,8 @@
 import express from "express";
 import fs from "fs";
+import os from "os";
 import path from "path";
+import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import { initializeApp, getApps } from "firebase/app";
@@ -9,18 +11,22 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// Load Firebase config & initialize server-side Firestore SDK for reliable crawler OG previews
+// Load Firebase config & initialize server-side Firestore SDK for reliable crawler OG previews & admin auth checks
 let serverDb: ReturnType<typeof getFirestore> | null = null;
+let firebaseApiKey = process.env.VITE_FIREBASE_API_KEY || "";
 try {
   const cfgPath = path.join(process.cwd(), "firebase-applet-config.json");
   if (fs.existsSync(cfgPath)) {
     const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf-8"));
+    if (cfg.apiKey) firebaseApiKey = cfg.apiKey;
     const fbApp = getApps().length > 0 ? getApps()[0] : initializeApp(cfg);
     serverDb = getFirestore(fbApp, cfg.firestoreDatabaseId);
   }
 } catch (err) {
-  console.warn("Server Firestore OG init notice:", err);
+  console.warn("Server Firestore init notice:", err);
 }
+
+const PRIMARY_SUPER_ADMIN_EMAIL = "mdisrafilh320@gmail.com";
 
 interface OgProductRecord {
   id: string;
@@ -223,7 +229,14 @@ function injectProductOpenGraphIntoHtml(
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use(
+  express.json({
+    limit: "15mb",
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 
 // Server-side Gemini AI Client with User-Agent header
 const geminiApiKey = process.env.GEMINI_API_KEY || "";
@@ -495,6 +508,1343 @@ Requirements:
     console.error("Error in /api/ai/format-product:", error);
     res.status(500).json({ error: error?.message || "Failed to format product notes." });
   }
+});
+
+// ============================================================================
+// ADMIN-ONLY AI SALES COPILOT (GEMINI VISION + PSYCHOLOGICAL CLOSER) & OMNICHANNEL WEBHOOKS
+// ============================================================================
+
+interface SalesCatalogProduct {
+  id: string;
+  nameEn: string;
+  nameBn: string;
+  taglineEn: string;
+  taglineBn: string;
+  brand: string;
+  category: string;
+  price: number;
+  originalPrice: number;
+  inStock: boolean;
+  stockCount: number;
+  image: string;
+  sku?: string;
+  freeDelivery?: boolean;
+  warrantyEn?: string;
+  descriptionEn?: string;
+}
+
+let salesCatalogCache: { items: SalesCatalogProduct[]; expiresAt: number } | null = null;
+
+type StandardAdminRole = "super_admin" | "admin" | "staff";
+
+function isActiveAdminDoc(data: any): { ok: boolean; role: StandardAdminRole } {
+  if (!data || data.active === false) {
+    return { ok: false, role: "staff" };
+  }
+  const rawRole = String(data.role || "").toLowerCase().trim();
+  if (rawRole === "super_admin") {
+    return { ok: true, role: "super_admin" };
+  }
+  if (rawRole === "admin" || rawRole === "supervisor") {
+    return { ok: true, role: "admin" };
+  }
+  if (rawRole === "staff") {
+    return { ok: true, role: "staff" };
+  }
+  if (data.isAdmin === true) {
+    return { ok: true, role: "admin" };
+  }
+  return { ok: false, role: "staff" };
+}
+
+async function verifyAdminBearerToken(
+  req: express.Request
+): Promise<
+  | { ok: true; uid: string; email: string; role: StandardAdminRole }
+  | { ok: false; status: number; error: string }
+> {
+  const authHeader = String(req.headers.authorization || "");
+  if (!authHeader.startsWith("Bearer ")) {
+    return { ok: false, status: 401, error: "Unauthorized: Missing Bearer token." };
+  }
+  const idToken = authHeader.slice(7).trim();
+  if (!idToken) {
+    return { ok: false, status: 401, error: "Unauthorized: Empty token." };
+  }
+  if (!firebaseApiKey) {
+    return { ok: false, status: 500, error: "Server Firebase configuration missing." };
+  }
+
+  try {
+    const lookupRes = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(firebaseApiKey)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      }
+    );
+    if (!lookupRes.ok) {
+      return { ok: false, status: 401, error: "Invalid or expired Firebase session token." };
+    }
+    const lookupData: any = await lookupRes.json();
+    const fbUser = lookupData?.users?.[0];
+    if (!fbUser || !fbUser.localId) {
+      return { ok: false, status: 401, error: "User record not found for token." };
+    }
+
+    const uid = String(fbUser.localId);
+    const email = String(fbUser.email || "").toLowerCase().trim();
+    const emailVerified = Boolean(fbUser.emailVerified);
+
+    if (email === PRIMARY_SUPER_ADMIN_EMAIL && emailVerified) {
+      return { ok: true, uid, email, role: "super_admin" };
+    }
+
+    if (serverDb) {
+      if (email && emailVerified) {
+        const emailSnap = await getDoc(doc(serverDb, "admins", email));
+        if (emailSnap.exists()) {
+          const parsed = isActiveAdminDoc(emailSnap.data());
+          if (parsed.ok) {
+            return { ok: true, uid, email, role: parsed.role };
+          }
+          return { ok: false, status: 403, error: "Forbidden: Admin account is suspended." };
+        }
+      }
+
+      const uidSnap = await getDoc(doc(serverDb, "admins", uid));
+      if (uidSnap.exists()) {
+        const parsed = isActiveAdminDoc(uidSnap.data());
+        if (parsed.ok) {
+          return { ok: true, uid, email, role: parsed.role };
+        }
+        return { ok: false, status: 403, error: "Forbidden: Admin account is suspended." };
+      }
+
+      const userSnap = await getDoc(doc(serverDb, "users", uid));
+      if (userSnap.exists()) {
+        const parsed = isActiveAdminDoc(userSnap.data());
+        if (parsed.ok) {
+          return { ok: true, uid, email, role: parsed.role };
+        }
+      }
+    }
+
+    return { ok: false, status: 403, error: "Forbidden: Admin privileges required." };
+  } catch (err: any) {
+    console.warn("Admin token verification error:", err?.message || err);
+    return { ok: false, status: 401, error: "Failed to verify credentials." };
+  }
+}
+
+async function fetchAllLiveProductsForSalesAI(fallbackItems?: any[]): Promise<SalesCatalogProduct[]> {
+  if (salesCatalogCache && salesCatalogCache.expiresAt > Date.now() && salesCatalogCache.items.length > 0) {
+    return salesCatalogCache.items;
+  }
+
+  const merged = new Map<string, SalesCatalogProduct>();
+  if (serverDb) {
+    for (const col of ["products", "luxora-products"]) {
+      try {
+        const snap = await Promise.race([
+          getDocs(collection(serverDb, col)),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Catalog fetch timeout")), 4500)),
+        ]);
+        snap.forEach((docSnap) => {
+          const d: any = docSnap.data() || {};
+          const id = String(d.id || docSnap.id).trim();
+          if (!id || merged.has(id)) return;
+          const galleryArr = Array.isArray(d.gallery) ? d.gallery : [];
+          merged.set(id, {
+            id,
+            nameEn: String(d.nameEn || d.nameBn || "Luxora Edition").trim(),
+            nameBn: String(d.nameBn || d.nameEn || "").trim(),
+            taglineEn: String(d.taglineEn || "").trim(),
+            taglineBn: String(d.taglineBn || "").trim(),
+            brand: String(d.brand || "Luxora Prime").trim(),
+            category: String(d.category || "gadgets").trim(),
+            price: Number(d.price) || 0,
+            originalPrice: Number(d.originalPrice) || 0,
+            inStock: d.inStock !== false && (Number(d.stockCount ?? 10) > 0),
+            stockCount: Number(d.stockCount ?? 10),
+            image: String(d.image || galleryArr[0] || "").trim(),
+            sku: d.sku ? String(d.sku) : undefined,
+            freeDelivery: Boolean(d.freeDelivery),
+            warrantyEn: d.warrantyEn ? String(d.warrantyEn) : undefined,
+            descriptionEn: String(d.descriptionEn || "").slice(0, 220),
+          });
+        });
+      } catch {
+        // try next collection
+      }
+    }
+  }
+
+  if (merged.size === 0 && Array.isArray(fallbackItems)) {
+    for (const d of fallbackItems) {
+      if (!d || !d.id) continue;
+      merged.set(String(d.id), {
+        id: String(d.id),
+        nameEn: String(d.nameEn || d.nameBn || "Luxora Edition").trim(),
+        nameBn: String(d.nameBn || d.nameEn || "").trim(),
+        taglineEn: String(d.taglineEn || "").trim(),
+        taglineBn: String(d.taglineBn || "").trim(),
+        brand: String(d.brand || "Luxora Prime").trim(),
+        category: String(d.category || "gadgets").trim(),
+        price: Number(d.price) || 0,
+        originalPrice: Number(d.originalPrice) || 0,
+        inStock: d.inStock !== false && (Number(d.stockCount ?? 10) > 0),
+        stockCount: Number(d.stockCount ?? 10),
+        image: String(d.image || "").trim(),
+        sku: d.sku ? String(d.sku) : undefined,
+        freeDelivery: Boolean(d.freeDelivery),
+        warrantyEn: d.warrantyEn ? String(d.warrantyEn) : undefined,
+      });
+    }
+  }
+
+  const items = Array.from(merged.values());
+  if (items.length > 0) {
+    salesCatalogCache = { items, expiresAt: Date.now() + 45_000 };
+  }
+  return items;
+}
+
+function getBigrams(str: string): string[] {
+  const s = str.toLowerCase().replace(/[^a-z0-9\u0980-\u09ff]/g, "");
+  if (s.length < 2) return s ? [s] : [];
+  const res: string[] = [];
+  for (let i = 0; i < s.length - 1; i++) {
+    res.push(s.slice(i, i + 2));
+  }
+  return res;
+}
+
+function diceSimilarity(a: string, b: string): number {
+  const bgA = getBigrams(a);
+  const bgB = getBigrams(b);
+  if (!bgA.length || !bgB.length) return 0;
+  const setB = new Map<string, number>();
+  for (const bg of bgB) setB.set(bg, (setB.get(bg) || 0) + 1);
+  let overlap = 0;
+  for (const bg of bgA) {
+    const c = setB.get(bg) || 0;
+    if (c > 0) {
+      overlap++;
+      setB.set(bg, c - 1);
+    }
+  }
+  return (2 * overlap) / (bgA.length + bgB.length);
+}
+
+function searchProductsFuzzyServer(queryText: string, catalog: SalesCatalogProduct[], limit = 4): SalesCatalogProduct[] {
+  const raw = String(queryText || "").trim().toLowerCase();
+  if (!raw || catalog.length === 0) return [];
+
+  const stopWords = new Set([
+    "price", "koto", "dam", "available", "ase", "ache", "naki", "bhai", "vai", "vaiya",
+    "sir", "apni", "apnara", "hello", "hi", "assalamu", "alaikum", "need", "want",
+    "details", "pic", "photo", "image", "discount", "kom", "kora", "jabe", "fixed",
+    "order", "korbo", "chai", "please", "pls", "the", "this", "that", "for", "with",
+    "দাম", "কত", "আছে", "নাকি", "ভাই", "অর্ডার", "করব", "চাই", "কম", "হবে", "ছবি",
+  ]);
+
+  const rawTokens = raw
+    .split(/[\s,.;:!?/\\|()\[\]{}"']+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2 && !stopWords.has(t));
+
+  const queryNormAlpha = raw.replace(/[^a-z0-9]/g, "");
+
+  const scored = catalog.map((prod) => {
+    const combined = `${prod.nameEn} ${prod.nameBn} ${prod.brand} ${prod.category} ${prod.taglineEn} ${prod.sku || ""} ${prod.id}`.toLowerCase();
+    const normCombined = combined.replace(/[^a-z0-9]/g, "");
+    const titleWords = `${prod.nameEn} ${prod.brand} ${prod.category} ${prod.sku || ""}`
+      .toLowerCase()
+      .split(/[\s\-_/]+/)
+      .filter((w) => w.length >= 2);
+
+    let score = 0;
+
+    if (queryNormAlpha.length >= 3 && normCombined.includes(queryNormAlpha)) {
+      score += 45;
+    }
+
+    for (const token of rawTokens) {
+      const tokenNorm = token.replace(/[^a-z0-9]/g, "");
+      if (combined.includes(token)) {
+        score += token.length >= 4 ? 26 : 18;
+      } else if (tokenNorm.length >= 2 && normCombined.includes(tokenNorm)) {
+        score += 24;
+      } else {
+        // Fuzzy typo tolerance against product title tokens
+        let bestWordSim = 0;
+        for (const w of titleWords) {
+          const sim = diceSimilarity(token, w);
+          if (sim > bestWordSim) bestWordSim = sim;
+        }
+        if (bestWordSim >= 0.62) {
+          score += Math.round(bestWordSim * 22);
+        }
+      }
+    }
+
+    if (score > 0 && prod.inStock) {
+      score += 3;
+    }
+
+    return { prod, score };
+  });
+
+  return scored
+    .filter((x) => x.score >= 12)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((x) => x.prod);
+}
+
+async function resolveImageInlineData(
+  imageInput?: string
+): Promise<{ mimeType: string; data: string } | null> {
+  if (!imageInput || typeof imageInput !== "string") return null;
+  const trimmed = imageInput.trim();
+  if (!trimmed) return null;
+
+  const dataMatch = trimmed.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/i);
+  if (dataMatch) {
+    return {
+      mimeType: dataMatch[1].toLowerCase(),
+      data: dataMatch[2],
+    };
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(trimmed, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!res.ok) return null;
+      const contentType = String(res.headers.get("content-type") || "image/jpeg").split(";")[0].trim();
+      if (!contentType.startsWith("image/")) return null;
+      const arrayBuf = await res.arrayBuffer();
+      if (arrayBuf.byteLength > 8 * 1024 * 1024) return null;
+      return {
+        mimeType: contentType,
+        data: Buffer.from(arrayBuf).toString("base64"),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function buildSalesCopilotFallback(params: {
+  customerMessage: string;
+  matchedProducts: SalesCatalogProduct[];
+  detectedLanguage: "en" | "bn";
+  tacticOverride?: string;
+  hasImage: boolean;
+}) {
+  const { customerMessage, matchedProducts, detectedLanguage, tacticOverride, hasImage } = params;
+  const top = matchedProducts[0];
+  const isBangla = detectedLanguage === "bn";
+  const lower = customerMessage.toLowerCase();
+  const isAskingDiscount =
+    tacticOverride === "fixed_price_urgency" ||
+    /discount|kom|less|last price|dam kom|bargain|কমান|কম হবে|ডিসকাউন্ট|ফিক্সড/.test(lower);
+  const isHesitant =
+    tacticOverride === "handle_objection" ||
+    /original|fake|trust|warranty|problem|return|guarantee|অরিজিনাল|ভালো হবে|রিটার্ন|ওয়ারেন্টি/.test(lower);
+
+  if (top) {
+    const priceFmt = `৳${top.price.toLocaleString("en-IN")}`;
+    const msrpPartBn =
+      top.originalPrice > top.price
+        ? ` (রেগুলার প্রাইস ৳${top.originalPrice.toLocaleString("en-IN")} থেকে অফারে পাচ্ছেন)`
+        : "";
+    const msrpPartEn =
+      top.originalPrice > top.price
+        ? ` (Promotional rate down from MSRP ৳${top.originalPrice.toLocaleString("en-IN")})`
+        : "";
+    const stockUrgencyBn =
+      top.inStock && top.stockCount <= 8
+        ? `বর্তমানে ভল্টে মাত্র **${top.stockCount} পিস** স্টকে রয়েছে`
+        : top.inStock
+          ? `বর্তমানে লিমিটেড ব্যাচ স্টকে আছে`
+          : `এই মুহূর্তে স্টক প্রায় শেষ পর্যায়ে`;
+    const stockUrgencyEn =
+      top.inStock && top.stockCount <= 8
+        ? `Only **${top.stockCount} units** remain in our vault`
+        : top.inStock
+          ? `Currently available from our limited batch`
+          : `This batch is currently sold out`;
+
+    if (isBangla) {
+      let opener = `আসসালামু আলাইকুম! Luxora BD-তে স্বাগতম। আপনার পছন্দের **${top.nameEn}** এখন মাত্র **${priceFmt}**${msrpPartBn}।`;
+      if (isAskingDiscount) {
+        opener = `আসসালামু আলাইকুম স্যার! আমাদের প্রতিটি পণ্যের দাম অফিশিয়ালি **ফিক্সড (${priceFmt})**${msrpPartBn}, কারণ আমরা প্রিমিয়াম কোয়ালিটির সাথে সেরা প্রোমোশনাল প্রাইসটাই দিয়ে থাকি। এই স্পেশাল অফার প্রাইসটি যেকোনো সময় রেগুলার দামে ফিরে যেতে পারে — আর ${stockUrgencyBn}!`;
+      } else if (isHesitant) {
+        opener = `আসসালামু আলাইকুম! একদম নিশ্চিন্ত থাকতে পারেন — আমাদের **${top.nameEn}** ১০০% অরিজিনাল সিল্ড প্যাক এবং পাচ্ছেন **৭ দিনের ইনস্ট্যান্ট রিপ্লেসমেন্ট ওয়ারেন্টি**। ডেলিভারির সময় ডেলিভারি ম্যানের সামনে প্রোডাক্ট দেখে ও চেক করে টাকা পরিশোধের সুবিধা রয়েছে (Price Fixed: **${priceFmt}**)।`;
+      }
+      const replyBn = `${opener}\n\n✅ ক্যাশ অন ডেলিভারি (চেক করে পেমেন্ট)\n🚚 ঢাকা ৳৭০ | সারাদেশ ৳১২০ (৳৫,০০০+ অর্ডারে ফ্রি ডেলিভারি)\n\nআজকের স্লটে প্রোডাক্টটি রিজার্ভ করতে আপনার **নাম, মোবাইল নম্বর এবং পূর্ণ ডেলিভারি ঠিকানা** দিন — আমি এখনই কনফার্ম করে দিচ্ছি!`;
+      return {
+        salesReply: replyBn,
+        salesReplyAlternate: `Hello! The **${top.nameEn}** is **${priceFmt}**${msrpPartEn} (Fixed Promotional Price). ${stockUrgencyEn} — includes 100% authentic inspection on Cash on Delivery + 7-day replacement guarantee. Share your **Name, Phone & Full Address** to lock your unit today!`,
+        urgencyAngle: `${stockUrgencyEn} at promotional ${priceFmt}`,
+        customerIntent: isAskingDiscount ? "Price Inquiry & Negotiation" : isHesitant ? "Trust & Warranty Assurance" : "Product Inquiry",
+        visualAnalysis: hasImage ? `Matched visually/contextually with ${top.nameEn}` : "",
+      };
+    }
+
+    let openerEn = `Assalamu Alaikum! Thank you for reaching out to Luxora BD. The **${top.nameEn}** is available right now at **${priceFmt}**${msrpPartEn}.`;
+    if (isAskingDiscount) {
+      openerEn = `Assalamu Alaikum! At Luxora BD, our pricing is strictly **fixed at ${priceFmt}**${msrpPartEn} because we already apply our lowest promotional margin upfront. ${stockUrgencyEn}, and this offer rate may revert shortly!`;
+    } else if (isHesitant) {
+      openerEn = `Assalamu Alaikum! You can order with 100% peace of mind — our **${top.nameEn}** (**${priceFmt}**) arrives factory-sealed with a **7-Day Instant Replacement Warranty** and full doorstep inspection before Cash on Delivery payment.`;
+    }
+    const replyEn = `${openerEn}\n\n✅ 100% Cash on Delivery (Inspect before paying)\n🚚 Express Delivery: Dhaka ৳70 | Nationwide ৳120 (Free over ৳5,000)\n\nSend me your **Name, Mobile Number, and Full Delivery Address** now and I will reserve your unit for today's dispatch!`;
+    return {
+      salesReply: replyEn,
+      salesReplyAlternate: `আসসালামু আলাইকুম! **${top.nameEn}** এখন প্রোমোশনাল ফিক্সড প্রাইস **${priceFmt}**${msrpPartBn}-এ পাচ্ছেন। ${stockUrgencyBn}! অর্ডার কনফার্ম করতে আপনার নাম, ফোন নম্বর ও ঠিকানা দিন।`,
+      urgencyAngle: `${stockUrgencyEn} at ${priceFmt}`,
+      customerIntent: isAskingDiscount ? "Price Negotiation" : isHesitant ? "Warranty & Authenticity Doubt" : "Purchase Inquiry",
+      visualAnalysis: hasImage ? `Matched against catalog item ${top.nameEn}` : "",
+    };
+  }
+
+  const genericBn = `আসসালামু আলাইকুম! Luxora BD-তে আপনাকে স্বাগতম। আপনি কোন প্রোডাক্টটির ছবি বা মডেল খুঁজছেন দয়া করে নাম বা আরেকটি পরিষ্কার ছবি শেয়ার করলে আমি সাথে সাথে লাইভ স্টক ও সেরা প্রোমোশনাল প্রাইস জানিয়ে অর্ডার কনফার্ম করে দেব!`;
+  const genericEn = `Assalamu Alaikum! Welcome to Luxora BD. Could you share the product name or model code you are looking for? I will check live vault stock immediately and reserve your unit with doorstep Cash on Delivery.`;
+  return {
+    salesReply: isBangla ? genericBn : genericEn,
+    salesReplyAlternate: isBangla ? genericEn : genericBn,
+    urgencyAngle: "Fast dispatch cutoff & limited daily vault allocation",
+    customerIntent: "General Product Inquiry",
+    visualAnalysis: hasImage ? "Image inspected; asking customer for clearer angle or model hint." : "",
+  };
+}
+
+type SocialChannelType = "messenger" | "whatsapp" | "instagram" | "tiktok";
+
+interface ServerChannelCredentials {
+  id: SocialChannelType;
+  label: string;
+  handleOrNumber: string;
+  pageOrBusinessId: string;
+  wabaId: string;
+  instagramBusinessId: string;
+  accessToken: string;
+  appKey: string;
+  appSecret: string;
+  verifyToken: string;
+  connected: boolean;
+  autoAiDraft: boolean;
+  lastWebhookAt?: string;
+  lastDispatchStatus?: string;
+  updatedAt: string;
+}
+
+const OMNICHANNEL_RUNTIME_PATH = path.join(os.tmpdir(), "luxora-omnichannel-runtime.json");
+
+function createDefaultRuntimeCredentials(): Record<SocialChannelType, ServerChannelCredentials> {
+  const defaultVerify = process.env.OMNICHANNEL_VERIFY_TOKEN || "luxora-omnichannel-verify";
+  const now = new Date().toISOString();
+  return {
+    messenger: {
+      id: "messenger",
+      label: "Facebook Messenger",
+      handleOrNumber: "m.me/luxorabd.official",
+      pageOrBusinessId: process.env.META_PAGE_ID || "",
+      wabaId: "",
+      instagramBusinessId: "",
+      accessToken: process.env.META_PAGE_ACCESS_TOKEN || "",
+      appKey: process.env.META_APP_ID || "",
+      appSecret: process.env.META_APP_SECRET || "",
+      verifyToken: defaultVerify,
+      connected: true,
+      autoAiDraft: true,
+      updatedAt: now,
+    },
+    whatsapp: {
+      id: "whatsapp",
+      label: "WhatsApp Business",
+      handleOrNumber: "+880 1871-693050",
+      pageOrBusinessId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
+      wabaId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "",
+      instagramBusinessId: "",
+      accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
+      appKey: "",
+      appSecret: process.env.META_APP_SECRET || "",
+      verifyToken: defaultVerify,
+      connected: true,
+      autoAiDraft: true,
+      updatedAt: now,
+    },
+    instagram: {
+      id: "instagram",
+      label: "Instagram Direct",
+      handleOrNumber: "@luxorabd.luxury",
+      pageOrBusinessId: process.env.INSTAGRAM_BUSINESS_ID || "",
+      wabaId: "",
+      instagramBusinessId: process.env.INSTAGRAM_BUSINESS_ID || "",
+      accessToken: process.env.INSTAGRAM_ACCESS_TOKEN || process.env.META_PAGE_ACCESS_TOKEN || "",
+      appKey: process.env.META_APP_ID || "",
+      appSecret: process.env.META_APP_SECRET || "",
+      verifyToken: defaultVerify,
+      connected: true,
+      autoAiDraft: true,
+      updatedAt: now,
+    },
+    tiktok: {
+      id: "tiktok",
+      label: "TikTok Business DM",
+      handleOrNumber: "@luxorabd",
+      pageOrBusinessId: process.env.TIKTOK_BUSINESS_ID || "",
+      wabaId: "",
+      instagramBusinessId: "",
+      accessToken: process.env.TIKTOK_ACCESS_TOKEN || "",
+      appKey: process.env.TIKTOK_APP_KEY || "",
+      appSecret: process.env.TIKTOK_APP_SECRET || "",
+      verifyToken: defaultVerify,
+      connected: true,
+      autoAiDraft: true,
+      updatedAt: now,
+    },
+  };
+}
+
+let runtimeChannelCredentials: Record<SocialChannelType, ServerChannelCredentials> = createDefaultRuntimeCredentials();
+
+// Rehydrate previously synced credentials from temporary server store if present
+try {
+  if (fs.existsSync(OMNICHANNEL_RUNTIME_PATH)) {
+    const raw = JSON.parse(fs.readFileSync(OMNICHANNEL_RUNTIME_PATH, "utf-8"));
+    for (const ch of ["messenger", "whatsapp", "instagram", "tiktok"] as SocialChannelType[]) {
+      if (raw && raw[ch]) {
+        runtimeChannelCredentials[ch] = {
+          ...runtimeChannelCredentials[ch],
+          ...raw[ch],
+          id: ch,
+        };
+      }
+    }
+  }
+} catch (err) {
+  console.warn("Omnichannel runtime cache notice:", err);
+}
+
+function persistRuntimeCredentials() {
+  try {
+    fs.writeFileSync(OMNICHANNEL_RUNTIME_PATH, JSON.stringify(runtimeChannelCredentials, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("Failed to persist runtime channel cache:", err);
+  }
+}
+
+function getEffectiveVerifyToken(): string {
+  for (const ch of ["messenger", "whatsapp", "instagram", "tiktok"] as SocialChannelType[]) {
+    const t = String(runtimeChannelCredentials[ch]?.verifyToken || "").trim();
+    if (t && t !== "luxora-omnichannel-verify") return t;
+  }
+  return (
+    String(runtimeChannelCredentials.messenger?.verifyToken || "").trim() ||
+    process.env.OMNICHANNEL_VERIFY_TOKEN ||
+    "luxora-omnichannel-verify"
+  );
+}
+
+function maskSecret(val?: string): string {
+  const s = String(val || "").trim();
+  if (!s) return "";
+  if (s.length <= 6) return "••••••";
+  return `${"•".repeat(Math.min(12, s.length - 4))}${s.slice(-4)}`;
+}
+
+async function runSalesCopilotCore(params: {
+  customerMessage: string;
+  conversationHistory?: any[];
+  imageDataUri?: string;
+  imageUrl?: string;
+  preferredLanguage?: string;
+  tacticOverride?: string;
+  clientCatalogFallback?: any[];
+}) {
+  const cleanMessage = String(params.customerMessage || "").trim();
+  const imagePartInput = await resolveImageInlineData(params.imageDataUri || params.imageUrl);
+  const catalog = await fetchAllLiveProductsForSalesAI(params.clientCatalogFallback);
+  const catalogBrief = catalog.slice(0, 60).map((p) => ({
+    id: p.id,
+    nameEn: p.nameEn,
+    nameBn: p.nameBn,
+    brand: p.brand,
+    category: p.category,
+    priceBDT: p.price,
+    originalPriceBDT: p.originalPrice,
+    inStock: p.inStock,
+    stockCount: p.stockCount,
+    freeDelivery: p.freeDelivery || false,
+  }));
+
+  const fuzzyInitial = cleanMessage ? searchProductsFuzzyServer(cleanMessage, catalog, 4) : [];
+  const hasBengaliScript = /[\u0980-\u09FF]/.test(cleanMessage);
+  const pref = String(params.preferredLanguage || "auto");
+  const inferredLang: "en" | "bn" =
+    pref === "bn" || pref === "en"
+      ? (pref as "en" | "bn")
+      : hasBengaliScript ||
+          /\b(vai|bhai|vaiya|koto|dam|ase|ache|naki|korbo|koman|lagbe|taka|dhaka|assalamu)\b/i.test(cleanMessage)
+        ? "bn"
+        : "en";
+
+  const tacticOverride = String(params.tacticOverride || "balanced");
+
+  if (aiClient) {
+    try {
+      const historyText = Array.isArray(params.conversationHistory)
+        ? params.conversationHistory
+            .slice(-8)
+            .map((m: any) => `${m.sender === "customer" ? "Customer" : "Luxora Sales"}: ${String(m.text || "").slice(0, 300)}`)
+            .join("\n")
+        : "";
+
+      const tacticInstruction: Record<string, string> = {
+        balanced:
+          "Adapt naturally to the customer message: identify product, state fixed promotional price with stock/offer urgency, handle doubts, and invite name + phone + address to confirm.",
+        fixed_price_urgency:
+          "Customer wants a discount or is comparing prices. Politely decline bargaining by explaining prices are strictly fixed at the lowest promotional rate, emphasize exact savings off MSRP and limited live stock, and warn the offer price may revert soon.",
+        handle_objection:
+          "Address hesitation (authenticity, build quality, return fear). Highlight factory-sealed units, 100% open-box inspection before Cash on Delivery payment, and 7-day instant replacement warranty.",
+        close_order:
+          "Push directly for the micro-commitment close: ask for their Name, Mobile Number, and Full Delivery Address right now so the parcel joins today's Steadfast/Pathao dispatch batch (COD or delivery fee advance only).",
+      };
+
+      const promptText = `Analyze this incoming customer DM for Luxora BD, match the exact live catalog product(s), and craft a high-converting sales reply.
+
+Requested Reply Language Mode: ${pref === "auto" ? `Match customer naturally (Detected: ${inferredLang === "bn" ? "Bengali (বাংলা)" : "English"})` : pref === "bn" ? "Bengali (বাংলা)" : "English"}
+Active Sales Tactic: ${tacticInstruction[tacticOverride] || tacticInstruction.balanced}
+
+Live Luxora BD Inventory Catalog (JSON):
+${JSON.stringify(catalogBrief)}
+
+Fuzzy Pre-Matched Candidates:
+${JSON.stringify(fuzzyInitial.map((p) => ({ id: p.id, nameEn: p.nameEn, price: p.price, stockCount: p.stockCount })))}
+
+Recent Chat History:
+${historyText || "(New conversation)"}
+
+Latest Customer Message:
+"${cleanMessage || "[Customer sent a product photo/screenshot without text — identify it visually and pitch the matching item]"}"
+
+Strict Closing Rules:
+1. If an image is attached, describe what product/attributes you see in \`visualAnalysis\` and match to exact \`id\`s from the Live Inventory Catalog above (do not invent IDs or prices).
+2. Also match partial/misspelled names (e.g. "b72" -> B72-B Earbuds, "sunset" -> USB Sunset Lamp, "calender" -> 3D Calendar LED Night Lamp).
+3. Price Policy: NEVER offer unauthorized discounts. Explain pricing is fixed at an exclusive promotional rate, highlight stock urgency using real \`stockCount\`, and mention delivery is ৳70 Dhaka / ৳100 Ctg / ৳120 Nationwide (Free above ৳5,000) with COD doorstep inspection.
+4. Always provide BOTH \`salesReply\` (in the active requested/detected language) and \`salesReplyAlternate\` (in the opposite language EN/BN).`;
+
+      const contentsPayload = imagePartInput
+        ? { parts: [{ inlineData: imagePartInput }, { text: promptText }] }
+        : promptText;
+
+      const response = await aiClient.models.generateContent({
+        model: "gemini-4-hydrogen",
+        contents: contentsPayload,
+        config: {
+          systemInstruction:
+            "You are the Elite Head of Sales & Omnichannel Closing Strategist for Luxora BD (Bangladesh). You combine warm Bangladeshi hospitality ('আসসালামু আলাইকুম') with persuasive psychological closing, strict fixed-price integrity, stock scarcity urgency, and crystal-clear Vision/catalog matching. Output strictly valid JSON matching the schema.",
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              visualAnalysis: { type: Type.STRING, description: "What is visible in the attached image, or empty string if no image" },
+              matchedProductIds: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: "Exact catalog product IDs matching the query or image",
+              },
+              customerIntent: { type: Type.STRING, description: "Short label e.g. Price Inquiry, Bargaining, Photo Lookup, Ready to Order" },
+              detectedLanguage: { type: Type.STRING, description: "Either 'bn' or 'en'" },
+              urgencyAngle: { type: Type.STRING, description: "One-line scarcity/urgency lever used" },
+              salesReply: { type: Type.STRING, description: "Ready-to-send persuasive sales message in primary language" },
+              salesReplyAlternate: { type: Type.STRING, description: "Alternative version in the second language (EN or BN)" },
+            },
+          },
+        },
+      });
+
+      const rawJson = (response.text ?? "").trim();
+      if (rawJson) {
+        const parsed = JSON.parse(rawJson);
+        const idSet = new Set<string>(
+          Array.isArray(parsed.matchedProductIds) ? parsed.matchedProductIds.map((x: any) => String(x).trim()) : []
+        );
+        const combinedFuzzy = searchProductsFuzzyServer(`${cleanMessage} ${parsed.visualAnalysis || ""}`, catalog, 4);
+        for (const fp of combinedFuzzy) {
+          if (idSet.size < 4) idSet.add(fp.id);
+        }
+        const matchedProducts = Array.from(idSet)
+          .map((id) => catalog.find((p) => p.id === id))
+          .filter((p): p is SalesCatalogProduct => Boolean(p));
+
+        const resolvedLang: "en" | "bn" =
+          parsed.detectedLanguage === "bn" || parsed.detectedLanguage === "en"
+            ? parsed.detectedLanguage
+            : inferredLang;
+
+        return {
+          provider: "gemini-4-hydrogen",
+          data: {
+            salesReply: String(parsed.salesReply || "").trim(),
+            salesReplyAlternate: String(parsed.salesReplyAlternate || "").trim(),
+            detectedLanguage: resolvedLang,
+            customerIntent: String(parsed.customerIntent || "Sales Inquiry"),
+            urgencyAngle: String(parsed.urgencyAngle || "Limited batch & promotional rate"),
+            visualAnalysis: String(parsed.visualAnalysis || ""),
+            matchedProducts,
+            provider: "gemini-4-hydrogen",
+          },
+        };
+      }
+    } catch (aiErr: any) {
+      console.warn("Sales Copilot Gemini fallback triggered:", aiErr?.message || aiErr);
+    }
+  }
+
+  const fb = buildSalesCopilotFallback({
+    customerMessage: cleanMessage,
+    matchedProducts: fuzzyInitial,
+    detectedLanguage: inferredLang,
+    tacticOverride,
+    hasImage: Boolean(imagePartInput),
+  });
+
+  return {
+    provider: "luxora-sales-closer-engine",
+    data: {
+      ...fb,
+      detectedLanguage: inferredLang,
+      matchedProducts: fuzzyInitial,
+      provider: "luxora-sales-closer-engine",
+    },
+  };
+}
+
+// Fetch WhatsApp Cloud API media attachment bytes -> Data URI for Gemini Vision inspection
+async function resolveWhatsAppMediaDataUri(mediaId: string, accessToken: string): Promise<string | undefined> {
+  if (!mediaId || !accessToken) return undefined;
+  try {
+    const metaRes = await fetch(`https://graph.facebook.com/v21.0/${encodeURIComponent(mediaId)}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!metaRes.ok) return undefined;
+    const metaJson: any = await metaRes.json();
+    const mediaUrl = String(metaJson?.url || "");
+    if (!mediaUrl) return undefined;
+    const fileRes = await fetch(mediaUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!fileRes.ok) return undefined;
+    const contentType = String(fileRes.headers.get("content-type") || "image/jpeg").split(";")[0].trim();
+    const buf = Buffer.from(await fileRes.arrayBuffer());
+    if (buf.byteLength > 4 * 1024 * 1024) return undefined;
+    return `data:${contentType};base64,${buf.toString("base64")}`;
+  } catch {
+    return undefined;
+  }
+}
+
+// Dispatch Real Outbound Reply via Saved Meta / WhatsApp / Instagram / TikTok API Credentials
+async function dispatchChannelOutboundReply(
+  channel: SocialChannelType,
+  recipientId: string,
+  replyText: string,
+  extraMeta?: { tiktokConversationId?: string }
+): Promise<{
+  dispatchedLive: boolean;
+  status: "sent_live" | "skipped_no_token" | "skipped_disabled" | "api_error";
+  detail: string;
+  externalMessageId?: string;
+}> {
+  const cfg = runtimeChannelCredentials[channel];
+  if (!cfg || !cfg.connected) {
+    return { dispatchedLive: false, status: "skipped_disabled", detail: `${channel} channel is paused.` };
+  }
+  const token = String(cfg.accessToken || "").trim();
+  if (!token) {
+    return {
+      dispatchedLive: false,
+      status: "skipped_no_token",
+      detail: `No ${channel} Access Token configured yet — reply drafted in CRM inbox.`,
+    };
+  }
+
+  try {
+    if (channel === "messenger") {
+      const pageTarget = encodeURIComponent(String(cfg.pageOrBusinessId || "me").trim() || "me");
+      const apiRes = await fetch(`https://graph.facebook.com/v21.0/${pageTarget}/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          recipient: { id: recipientId },
+          messaging_type: "RESPONSE",
+          message: { text: replyText },
+        }),
+      });
+      const json: any = await apiRes.json().catch(() => ({}));
+      if (!apiRes.ok) {
+        return {
+          dispatchedLive: false,
+          status: "api_error",
+          detail: json?.error?.message || `Messenger Graph API error (${apiRes.status})`,
+        };
+      }
+      return {
+        dispatchedLive: true,
+        status: "sent_live",
+        detail: "Delivered live via Meta Messenger Graph API v21.0",
+        externalMessageId: json?.message_id,
+      };
+    }
+
+    if (channel === "instagram") {
+      const igId = encodeURIComponent(String(cfg.instagramBusinessId || cfg.pageOrBusinessId || "me").trim() || "me");
+      const apiRes = await fetch(`https://graph.facebook.com/v21.0/${igId}/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          recipient: { id: recipientId },
+          message: { text: replyText },
+        }),
+      });
+      const json: any = await apiRes.json().catch(() => ({}));
+      if (!apiRes.ok) {
+        return {
+          dispatchedLive: false,
+          status: "api_error",
+          detail: json?.error?.message || `Instagram Graph API error (${apiRes.status})`,
+        };
+      }
+      return {
+        dispatchedLive: true,
+        status: "sent_live",
+        detail: "Delivered live via Instagram Direct Graph API v21.0",
+        externalMessageId: json?.message_id,
+      };
+    }
+
+    if (channel === "whatsapp") {
+      const phoneId = String(cfg.pageOrBusinessId || "").trim();
+      if (!phoneId) {
+        return {
+          dispatchedLive: false,
+          status: "skipped_no_token",
+          detail: "WhatsApp Phone Number ID is required for Cloud API dispatch.",
+        };
+      }
+      const cleanRecipient = recipientId.replace(/[^\d]/g, "");
+      const apiRes = await fetch(`https://graph.facebook.com/v21.0/${encodeURIComponent(phoneId)}/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: cleanRecipient,
+          type: "text",
+          text: { preview_url: true, body: replyText },
+        }),
+      });
+      const json: any = await apiRes.json().catch(() => ({}));
+      if (!apiRes.ok) {
+        return {
+          dispatchedLive: false,
+          status: "api_error",
+          detail: json?.error?.message || `WhatsApp Cloud API error (${apiRes.status})`,
+        };
+      }
+      return {
+        dispatchedLive: true,
+        status: "sent_live",
+        detail: "Delivered live via WhatsApp Business Cloud API v21.0",
+        externalMessageId: json?.messages?.[0]?.id,
+      };
+    }
+
+    if (channel === "tiktok") {
+      const apiRes = await fetch("https://business-api.tiktok.com/open_api/v1.3/im/message/send/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Token": token,
+        },
+        body: JSON.stringify({
+          business_id: cfg.pageOrBusinessId || undefined,
+          recipient_type: "USER",
+          recipient_id: recipientId,
+          conversation_id: extraMeta?.tiktokConversationId || undefined,
+          message_type: "TEXT",
+          text: { body: replyText },
+        }),
+      });
+      const json: any = await apiRes.json().catch(() => ({}));
+      if (!apiRes.ok || (typeof json?.code === "number" && json.code !== 0)) {
+        return {
+          dispatchedLive: false,
+          status: "api_error",
+          detail: json?.message || `TikTok Messaging API error (${apiRes.status})`,
+        };
+      }
+      return {
+        dispatchedLive: true,
+        status: "sent_live",
+        detail: "Delivered live via TikTok Business Messaging API",
+        externalMessageId: json?.data?.message_id,
+      };
+    }
+  } catch (err: any) {
+    return {
+      dispatchedLive: false,
+      status: "api_error",
+      detail: err?.message || "Outbound network error",
+    };
+  }
+
+  return { dispatchedLive: false, status: "skipped_no_token", detail: "Unsupported channel" };
+}
+
+// POST /api/ai/sales-copilot — Strictly Admin-Gated (Firebase ID Token + Admin DB verification)
+app.post("/api/ai/sales-copilot", async (req, res) => {
+  const adminAuth = await verifyAdminBearerToken(req);
+  if ("status" in adminAuth) {
+    res.status(adminAuth.status).json({ error: adminAuth.error });
+    return;
+  }
+
+  try {
+    const {
+      customerMessage = "",
+      conversationHistory = [],
+      imageDataUri,
+      imageUrl,
+      preferredLanguage = "auto",
+      tacticOverride = "balanced",
+      clientCatalogFallback = [],
+    } = req.body || {};
+
+    if (!String(customerMessage || "").trim() && !imageDataUri && !imageUrl) {
+      res.status(400).json({ error: "Provide a customer message or product screenshot to analyze." });
+      return;
+    }
+
+    const result = await runSalesCopilotCore({
+      customerMessage,
+      conversationHistory,
+      imageDataUri,
+      imageUrl,
+      preferredLanguage,
+      tacticOverride,
+      clientCatalogFallback,
+    });
+
+    res.json({ success: true, ...result });
+  } catch (error: any) {
+    console.error("Error in /api/ai/sales-copilot:", error);
+    res.status(500).json({ error: error?.message || "Sales Copilot failed to analyze inquiry." });
+  }
+});
+
+// Admin-Only Omnichannel Credentials Status & Sync Endpoints
+app.get("/api/omnichannel/credentials", async (req, res) => {
+  const adminAuth = await verifyAdminBearerToken(req);
+  if ("status" in adminAuth) {
+    res.status(adminAuth.status).json({ error: adminAuth.error });
+    return;
+  }
+
+  const summary = (["messenger", "whatsapp", "instagram", "tiktok"] as SocialChannelType[]).map((ch) => {
+    const c = runtimeChannelCredentials[ch];
+    return {
+      id: c.id,
+      label: c.label,
+      handleOrNumber: c.handleOrNumber,
+      pageOrBusinessId: c.pageOrBusinessId,
+      wabaId: c.wabaId,
+      instagramBusinessId: c.instagramBusinessId,
+      hasAccessToken: Boolean(c.accessToken?.trim()),
+      maskedAccessToken: maskSecret(c.accessToken),
+      hasAppKey: Boolean(c.appKey?.trim()),
+      hasAppSecret: Boolean(c.appSecret?.trim()),
+      verifyToken: getEffectiveVerifyToken(),
+      connected: c.connected,
+      autoAiDraft: c.autoAiDraft,
+      lastWebhookAt: c.lastWebhookAt || null,
+      lastDispatchStatus: c.lastDispatchStatus || null,
+      updatedAt: c.updatedAt,
+    };
+  });
+
+  res.json({ success: true, channels: summary, verifyToken: getEffectiveVerifyToken() });
+});
+
+app.post("/api/omnichannel/credentials/sync", async (req, res) => {
+  const adminAuth = await verifyAdminBearerToken(req);
+  if ("status" in adminAuth) {
+    res.status(adminAuth.status).json({ error: adminAuth.error });
+    return;
+  }
+
+  const incoming = Array.isArray(req.body?.channels) ? req.body.channels : [];
+  const sharedVerifyToken = typeof req.body?.verifyToken === "string" ? req.body.verifyToken.trim() : "";
+
+  for (const item of incoming) {
+    if (!item || !["messenger", "whatsapp", "instagram", "tiktok"].includes(item.id)) continue;
+    const ch = item.id as SocialChannelType;
+    const prev = runtimeChannelCredentials[ch];
+    runtimeChannelCredentials[ch] = {
+      ...prev,
+      id: ch,
+      label: String(item.label || prev.label),
+      handleOrNumber: String(item.handleOrNumber ?? prev.handleOrNumber),
+      pageOrBusinessId: String(item.pageOrBusinessId ?? item.instagramBusinessId ?? prev.pageOrBusinessId ?? "").trim(),
+      wabaId: String(item.wabaId ?? prev.wabaId ?? "").trim(),
+      instagramBusinessId: String(item.instagramBusinessId ?? item.pageOrBusinessId ?? prev.instagramBusinessId ?? "").trim(),
+      accessToken: item.accessToken !== undefined ? String(item.accessToken).trim() : prev.accessToken,
+      appKey: item.appKey !== undefined ? String(item.appKey).trim() : prev.appKey,
+      appSecret: item.appSecret !== undefined ? String(item.appSecret).trim() : prev.appSecret,
+      verifyToken: sharedVerifyToken || String(item.verifyToken || prev.verifyToken || "luxora-omnichannel-verify").trim(),
+      connected: item.connected !== undefined ? Boolean(item.connected) : prev.connected,
+      autoAiDraft: item.autoAiDraft !== undefined ? Boolean(item.autoAiDraft) : prev.autoAiDraft,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  persistRuntimeCredentials();
+  res.json({
+    success: true,
+    syncedAt: new Date().toISOString(),
+    verifyToken: getEffectiveVerifyToken(),
+    readiness: (["messenger", "whatsapp", "instagram", "tiktok"] as SocialChannelType[]).map((ch) => ({
+      id: ch,
+      connected: runtimeChannelCredentials[ch].connected,
+      autoAiDraft: runtimeChannelCredentials[ch].autoAiDraft,
+      readyForLiveReply: Boolean(runtimeChannelCredentials[ch].accessToken?.trim()),
+    })),
+  });
+});
+
+// Admin-Only Live Outbound Message Dispatch Endpoint
+app.post("/api/omnichannel/send-reply", async (req, res) => {
+  const adminAuth = await verifyAdminBearerToken(req);
+  if ("status" in adminAuth) {
+    res.status(adminAuth.status).json({ error: adminAuth.error });
+    return;
+  }
+
+  const channel = String(req.body?.channel || "") as SocialChannelType;
+  const recipientId = String(req.body?.customerId || req.body?.customerPhone || "").trim();
+  const text = String(req.body?.text || "").trim();
+
+  if (!["messenger", "whatsapp", "instagram", "tiktok"].includes(channel) || !recipientId || !text) {
+    res.status(400).json({ error: "channel, recipientId, and text are required." });
+    return;
+  }
+
+  const dispatch = await dispatchChannelOutboundReply(channel, recipientId, text);
+  if (runtimeChannelCredentials[channel]) {
+    runtimeChannelCredentials[channel].lastDispatchStatus = dispatch.detail;
+    persistRuntimeCredentials();
+  }
+  res.json({ success: true, ...dispatch });
+});
+
+// Omnichannel Webhook Buffer (Messenger, WhatsApp Business, Instagram DM, TikTok DM)
+interface QueuedWebhookEvent {
+  queueId: string;
+  channel: SocialChannelType;
+  customerId: string;
+  customerName: string;
+  customerHandle?: string;
+  customerPhone?: string;
+  text: string;
+  imageUrl?: string;
+  tiktokConversationId?: string;
+  aiAutoReply?: string;
+  aiMatchedProductIds?: string[];
+  aiVisualAnalysis?: string;
+  aiUrgencyAngle?: string;
+  aiDetectedLanguage?: "en" | "bn";
+  dispatchStatus?: string;
+  timestamp: string;
+}
+
+const pendingWebhookQueue: QueuedWebhookEvent[] = [];
+
+function enqueueWebhookEvent(evt: QueuedWebhookEvent) {
+  pendingWebhookQueue.push(evt);
+  if (pendingWebhookQueue.length > 200) {
+    pendingWebhookQueue.shift();
+  }
+}
+
+async function processInboundWebhookEvent(evt: QueuedWebhookEvent, catalogFallback?: any[]) {
+  const cfg = runtimeChannelCredentials[evt.channel];
+  if (cfg) {
+    cfg.lastWebhookAt = new Date().toISOString();
+  }
+
+  // Run Gemini AI Sales Assistant automatically on incoming webhook message
+  const aiRes = await runSalesCopilotCore({
+    customerMessage: evt.text,
+    imageDataUri: evt.imageUrl?.startsWith("data:image/") ? evt.imageUrl : undefined,
+    imageUrl: evt.imageUrl && !evt.imageUrl.startsWith("data:image/") ? evt.imageUrl : undefined,
+    preferredLanguage: "auto",
+    tacticOverride: "balanced",
+    clientCatalogFallback: catalogFallback,
+  });
+
+  evt.aiAutoReply = aiRes.data.salesReply;
+  evt.aiMatchedProductIds = aiRes.data.matchedProducts.map((p) => p.id);
+  evt.aiVisualAnalysis = aiRes.data.visualAnalysis || undefined;
+  evt.aiUrgencyAngle = aiRes.data.urgencyAngle || undefined;
+  evt.aiDetectedLanguage = aiRes.data.detectedLanguage;
+
+  if (cfg && cfg.connected && cfg.autoAiDraft && aiRes.data.salesReply) {
+    const dispatch = await dispatchChannelOutboundReply(
+      evt.channel,
+      evt.customerPhone || evt.customerId,
+      aiRes.data.salesReply,
+      { tiktokConversationId: evt.tiktokConversationId }
+    );
+    evt.dispatchStatus = `${dispatch.status}: ${dispatch.detail}`;
+    cfg.lastDispatchStatus = evt.dispatchStatus;
+    persistRuntimeCredentials();
+  } else {
+    evt.dispatchStatus = "queued_for_admin_review";
+  }
+
+  enqueueWebhookEvent(evt);
+  return evt;
+}
+
+// Admin-Only End-to-End Live Webhook + Gemini Auto-Reply Tester
+app.post("/api/omnichannel/test-webhook", async (req, res) => {
+  const adminAuth = await verifyAdminBearerToken(req);
+  if ("status" in adminAuth) {
+    res.status(adminAuth.status).json({ error: adminAuth.error });
+    return;
+  }
+
+  try {
+    const channelRaw = String(req.body?.channel || "messenger").toLowerCase();
+    const channel: SocialChannelType =
+      channelRaw === "whatsapp" || channelRaw === "instagram" || channelRaw === "tiktok"
+        ? channelRaw
+        : "messenger";
+    const text = String(req.body?.text || "").trim();
+    const customerName = String(req.body?.customerName || `Test ${channel} Shopper`).trim();
+    const customerId = String(req.body?.customerId || `test-${channel}-${Date.now().toString(36)}`).trim();
+
+    if (!text && !req.body?.imageDataUri) {
+      res.status(400).json({ error: "Enter a sample customer message to run webhook test." });
+      return;
+    }
+
+    const evt: QueuedWebhookEvent = {
+      queueId: `wh-test-${Date.now()}`,
+      channel,
+      customerId,
+      customerName,
+      customerPhone: channel === "whatsapp" ? customerId : undefined,
+      text: text || "Sent a product photo",
+      imageUrl: req.body?.imageDataUri || undefined,
+      timestamp: new Date().toISOString(),
+    };
+
+    const processed = await processInboundWebhookEvent(evt, req.body?.clientCatalogFallback);
+    res.json({ success: true, event: processed });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || "Webhook test pipeline failed." });
+  }
+});
+
+// Webhook Verification Challenge (Meta Messenger, WhatsApp, Instagram, TikTok)
+app.get("/api/webhooks/omnichannel", (req, res) => {
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+  const expectedToken = getEffectiveVerifyToken();
+
+  if (mode === "subscribe" && token === expectedToken && challenge) {
+    res.status(200).send(String(challenge));
+    return;
+  }
+
+  if (typeof req.query.challenge === "string") {
+    res.status(200).send(req.query.challenge);
+    return;
+  }
+
+  res.json({
+    status: "ok",
+    endpoint: "/api/webhooks/omnichannel",
+    supportedChannels: ["messenger", "whatsapp", "instagram", "tiktok"],
+    configuredChannels: (["messenger", "whatsapp", "instagram", "tiktok"] as SocialChannelType[]).filter((ch) =>
+      Boolean(runtimeChannelCredentials[ch]?.accessToken)
+    ),
+  });
+});
+
+// Webhook Ingestion Endpoint for Meta / WhatsApp / Instagram / TikTok DMs (Auto-processes with Gemini AI & Auto-Replies)
+app.post("/api/webhooks/omnichannel", async (req: any, res) => {
+  try {
+    const body: any = req.body || {};
+    const nowIso = new Date().toISOString();
+    const parsedEvents: QueuedWebhookEvent[] = [];
+
+    // Optional Meta X-Hub-Signature-256 verification when App Secret is configured
+    const sigHeader = String(req.headers["x-hub-signature-256"] || "");
+    const metaAppSecret =
+      runtimeChannelCredentials.messenger?.appSecret ||
+      runtimeChannelCredentials.instagram?.appSecret ||
+      runtimeChannelCredentials.whatsapp?.appSecret;
+    if (sigHeader && metaAppSecret && req.rawBody) {
+      const expectedSig =
+        "sha256=" + crypto.createHmac("sha256", metaAppSecret).update(req.rawBody).digest("hex");
+      if (sigHeader.length !== expectedSig.length || !crypto.timingSafeEqual(Buffer.from(sigHeader), Buffer.from(expectedSig))) {
+        console.warn("Omnichannel webhook Meta HMAC signature mismatch rejected.");
+        res.status(401).json({ error: "Invalid webhook signature" });
+        return;
+      }
+    }
+
+    // 1. Meta Messenger / Instagram Object Schema
+    if ((body.object === "page" || body.object === "instagram") && Array.isArray(body.entry)) {
+      const ch: SocialChannelType = body.object === "instagram" ? "instagram" : "messenger";
+      for (const entry of body.entry) {
+        const events = Array.isArray(entry.messaging) ? entry.messaging : [];
+        for (const ev of events) {
+          const senderId = String(ev?.sender?.id || "");
+          const msg = ev?.message;
+          if (!senderId || !msg || msg.is_echo) continue;
+          const imgAtt = Array.isArray(msg.attachments)
+            ? msg.attachments.find((a: any) => a?.type === "image")?.payload?.url
+            : undefined;
+          parsedEvents.push({
+            queueId: `wh-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            channel: ch,
+            customerId: senderId,
+            customerName: String(ev?.sender?.name || `${ch === "instagram" ? "IG" : "FB"} User ${senderId.slice(-4)}`),
+            text: String(msg.text || (imgAtt ? "Sent a product photo" : "")).trim(),
+            imageUrl: imgAtt,
+            timestamp: ev.timestamp ? new Date(Number(ev.timestamp)).toISOString() : nowIso,
+          });
+        }
+      }
+    }
+
+    // 2. Meta WhatsApp Business Cloud API Schema
+    if (body.object === "whatsapp_business_account" && Array.isArray(body.entry)) {
+      const waToken = runtimeChannelCredentials.whatsapp?.accessToken || "";
+      for (const entry of body.entry) {
+        const changes = Array.isArray(entry.changes) ? entry.changes : [];
+        for (const change of changes) {
+          const value = change?.value || {};
+          const contacts = Array.isArray(value.contacts) ? value.contacts : [];
+          const messages = Array.isArray(value.messages) ? value.messages : [];
+          for (const msg of messages) {
+            const fromPhone = String(msg.from || "");
+            if (!fromPhone) continue;
+            const contactName = contacts.find((c: any) => c.wa_id === fromPhone)?.profile?.name;
+            let waImageDataUri: string | undefined;
+            if (msg.type === "image" && msg.image?.id && waToken) {
+              waImageDataUri = await resolveWhatsAppMediaDataUri(String(msg.image.id), waToken);
+            }
+            const text = String(msg?.text?.body || msg?.image?.caption || (msg.type === "image" ? "Sent a product image" : "")).trim();
+            parsedEvents.push({
+              queueId: `wh-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              channel: "whatsapp",
+              customerId: fromPhone,
+              customerName: String(contactName || `+${fromPhone}`),
+              customerPhone: fromPhone,
+              text,
+              imageUrl: waImageDataUri,
+              timestamp: nowIso,
+            });
+          }
+        }
+      }
+    }
+
+    // 3. TikTok / Direct Normalized Webhook Bridge Payload
+    if (
+      parsedEvents.length === 0 &&
+      (body.channel || body.platform || body.event === "im.message.receive" || body.type === "direct_message")
+    ) {
+      const chRaw = String(body.channel || body.platform || (body.event === "im.message.receive" ? "tiktok" : "messenger")).toLowerCase();
+      const ch: SocialChannelType =
+        chRaw === "whatsapp" || chRaw === "instagram" || chRaw === "tiktok" ? chRaw : "messenger";
+      const text = String(body.text || body.content?.text || body.message || "").trim();
+      const imageUrl = body.imageUrl || body.content?.image_url || undefined;
+      if (text || imageUrl) {
+        parsedEvents.push({
+          queueId: `wh-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          channel: ch,
+          customerId: String(body.customerId || body.senderId || body.from_user_id || `ext-${Date.now()}`),
+          customerName: String(body.customerName || body.senderName || "Social Customer"),
+          customerHandle: body.customerHandle ? String(body.customerHandle) : undefined,
+          customerPhone: body.customerPhone ? String(body.customerPhone) : undefined,
+          tiktokConversationId: body.conversation_id ? String(body.conversation_id) : undefined,
+          text: text || "Sent a product photo",
+          imageUrl: imageUrl ? String(imageUrl) : undefined,
+          timestamp: nowIso,
+        });
+      }
+    }
+
+    // Acknowledge Meta/WhatsApp/TikTok immediately unless explicit ?await=true is requested
+    const awaitProcessing = String(req.query.await || "") === "true";
+    if (awaitProcessing) {
+      const processed = [];
+      for (const evt of parsedEvents) {
+        processed.push(await processInboundWebhookEvent(evt));
+      }
+      res.status(200).json({ received: true, ingestedCount: processed.length, processed });
+      return;
+    }
+
+    res.status(200).json({ received: true, ingestedCount: parsedEvents.length });
+
+    // Background Gemini AI evaluation & live outbound reply dispatch
+    for (const evt of parsedEvents) {
+      processInboundWebhookEvent(evt).catch((err) => {
+        console.warn("Async webhook AI processing warning:", err);
+        enqueueWebhookEvent(evt);
+      });
+    }
+  } catch (err: any) {
+    res.status(200).json({ received: true, warning: err?.message || "Parsed with warnings" });
+  }
+});
+
+// Admin-Only Drain of Queued Inbound Webhook Messages
+app.get("/api/webhooks/omnichannel/pending", async (req, res) => {
+  const adminAuth = await verifyAdminBearerToken(req);
+  if ("status" in adminAuth) {
+    res.status(adminAuth.status).json({ error: adminAuth.error });
+    return;
+  }
+  const drained = pendingWebhookQueue.splice(0, pendingWebhookQueue.length);
+  res.json({ success: true, events: drained });
 });
 
 // Mock/REST Courier Delivery Tracking API Endpoint (Steadfast / Pathao integration bridge)
