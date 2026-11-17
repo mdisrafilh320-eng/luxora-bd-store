@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import {
   Language,
   ProductCategory,
@@ -140,6 +140,9 @@ interface AppContextType {
 
   // Dynamic Storefront CMS (Hero Banners, Categories, Return Policy)
   banners: HeroBannerItem[];
+  addBannerToState: (banner: HeroBannerItem) => void;
+  removeBannerFromState: (bannerId: string) => void;
+  updateBannerInState: (bannerId: string, patch: Partial<HeroBannerItem>) => void;
   categories: CategoryItem[];
   returnPolicy: ReturnPolicyConfig;
   updateReturnPolicy: (newPolicy: ReturnPolicyConfig) => Promise<void>;
@@ -190,6 +193,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Toast notification state
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
   const addToast = useCallback((toastData: Omit<ToastMessage, 'id'>) => {
     const id = 'toast-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5);
     const newToast: ToastMessage = { ...toastData, id };
@@ -199,11 +206,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTimeout(() => {
       removeToast(id);
     }, 4500);
-  }, []);
-
-  const removeToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
+  }, [removeToast]);
 
   // Products state (initialized from cached catalog with per-visit fair shuffle & stock-out at bottom)
   const [products, setProducts] = useState<Product[]>(() =>
@@ -246,10 +249,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     validateFirestoreConnection();
-    // 1. Initial async refresh from live Firestore
-    refreshProducts();
-
-    // 2. Real-time onSnapshot listener for instant updates across all sessions worldwide
+    // Single real-time onSnapshot listener handles initial load + live cloud updates without duplicate full-collection reads
     const unsubscribe = subscribeToProducts((liveProducts) => {
       if (Array.isArray(liveProducts)) {
         setProducts(liveProducts);
@@ -259,7 +259,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       unsubscribe();
     };
-  }, [refreshProducts]);
+  }, []);
 
   // Cart state (persisted, zero-state clean)
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -327,7 +327,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
-  // Check redirect result and subscribe to Firebase Auth changes
+  const languageRef = useRef(language);
+  languageRef.current = language;
+
+  // Check redirect result and subscribe to Firebase Auth changes (never re-subscribe on language toggle)
   useEffect(() => {
     // Check for incoming redirect sign-in result (e.g. from mobile / popup-blocked redirects)
     checkRedirectResult()
@@ -348,14 +351,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const pendingSync = getPendingRegistrationSync(fbUser.uid);
           let profile = pendingSync ? await pendingSync : await getUserProfile(fbUser.uid);
           if (!profile) {
-            profile = await syncUserProfile(fbUser, { language });
+            profile = await syncUserProfile(fbUser, { language: languageRef.current });
           }
           setUser(profile);
           try {
             localStorage.setItem('luxora_user', JSON.stringify(profile));
           } catch {}
         } catch (error) {
-          console.error('Error fetching user profile:', error);
+          console.warn('Firestore profile lookup fallback activated:', error);
+          let fallbackProfile: UserProfile | null = null;
+          try {
+            const cachedRaw = localStorage.getItem('luxora_user');
+            if (cachedRaw) {
+              const parsed = JSON.parse(cachedRaw) as UserProfile;
+              if (parsed && parsed.id === fbUser.uid) {
+                fallbackProfile = parsed;
+              }
+            }
+          } catch {}
+
+          if (!fallbackProfile) {
+            fallbackProfile = {
+              id: fbUser.uid,
+              name: fbUser.displayName || fbUser.email?.split('@')[0] || 'Luxora Member',
+              email: fbUser.email || '',
+              phoneNumber: fbUser.phoneNumber || '',
+              photoURL: fbUser.photoURL || '',
+              role: isSuperAdminEmail(fbUser.email) ? 'admin' : 'customer',
+              membershipTier: 'Standard',
+              language: languageRef.current,
+              points: 100,
+              savedAddresses: [],
+              isGuest: false,
+            };
+          }
+          setUser(fallbackProfile);
         }
       } else {
         setUser(null);
@@ -370,7 +400,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     return () => unsubscribe();
-  }, [language]);
+  }, []);
 
   // Auth Handlers (Google & Email/Password only)
   const handleLoginWithEmail = async (email: string, pass: string) => {
@@ -693,6 +723,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [returnPolicy, setReturnPolicy] = useState<ReturnPolicyConfig>(() => getCachedReturnPolicy());
   const [isReturnPolicyModalOpen, setIsReturnPolicyModalOpen] = useState<boolean>(false);
 
+  const addBannerToState = useCallback((banner: HeroBannerItem) => {
+    setBanners((prev) => {
+      const filtered = prev.filter((b) => b.id !== banner.id);
+      return [...filtered, banner].sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
+    });
+  }, []);
+
+  const removeBannerFromState = useCallback((bannerId: string) => {
+    setBanners((prev) => prev.filter((b) => b.id !== bannerId));
+  }, []);
+
+  const updateBannerInState = useCallback((bannerId: string, patch: Partial<HeroBannerItem>) => {
+    setBanners((prev) =>
+      prev.map((b) => (b.id === bannerId ? { ...b, ...patch } : b))
+    );
+  }, []);
+
   useEffect(() => {
     const unsubBanners = subscribeToBanners((liveBanners) => {
       setBanners(liveBanners);
@@ -802,6 +849,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatePaymentSettings,
         refreshPaymentSettings,
         banners,
+        addBannerToState,
+        removeBannerFromState,
+        updateBannerInState,
         categories,
         returnPolicy,
         updateReturnPolicy,

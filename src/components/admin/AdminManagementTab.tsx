@@ -85,11 +85,6 @@ const ROLE_PERMISSION_MATRIX: PermissionMatrixTier[] = [
 export const AdminManagementTab: React.FC = () => {
   const { user, isAdmin, isSuperAdmin, adminRole, addToast, language } = useApp();
 
-  // Strictly block Fulfillment Staff & non-admins from User Access Control
-  if (!isAdmin || adminRole === 'staff') {
-    return null;
-  }
-
   const [admins, setAdmins] = useState<AuthorizedAdmin[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -102,6 +97,10 @@ export const AdminManagementTab: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState<AssignableRole>('staff');
 
   useEffect(() => {
+    if (!isAdmin || adminRole === 'staff') {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     const unsubscribe = adminRbacService.subscribeToAdmins((list) => {
       setAdmins(list);
@@ -111,7 +110,7 @@ export const AdminManagementTab: React.FC = () => {
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, []);
+  }, [isAdmin, adminRole]);
 
   const handleAddAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -248,6 +247,11 @@ export const AdminManagementTab: React.FC = () => {
       });
     }
   };
+
+  // Strictly block Fulfillment Staff & non-admins from User Access Control
+  if (!isAdmin || adminRole === 'staff') {
+    return null;
+  }
 
   return (
     <div id="admin-management-tab" className="space-y-6 animate-fadeIn">

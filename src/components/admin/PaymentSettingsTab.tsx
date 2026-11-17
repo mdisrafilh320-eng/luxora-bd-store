@@ -269,40 +269,6 @@ export const PaymentSettingsTab: React.FC = () => {
 
       {/* Master Rules & Global Toggles Bar */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {/* Strict Send Money Only Master Rule */}
-        <div className="p-5 rounded-2xl bg-[#12141A] border border-amber-500/30 space-y-3 relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400">
-                <ShieldAlert className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="text-xs font-bold text-white block">
-                  {language === 'bn' ? 'সেন্ড মানি স্ট্রিক্ট পলিসি' : 'Strict "Send Money" Policy'}
-                </span>
-                <span className="text-[10px] text-amber-400 font-mono">
-                  Merchant Payment Prevention
-                </span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setFormData(prev => ({ ...prev, sendMoneyStrictRule: !prev.sendMoneyStrictRule }))}
-              className="text-2xl transition-transform active:scale-95"
-            >
-              {formData.sendMoneyStrictRule ? (
-                <ToggleRight className="w-8 h-8 text-[#D4AF37]" />
-              ) : (
-                <ToggleLeft className="w-8 h-8 text-gray-600" />
-              )}
-            </button>
-          </div>
-          <p className="text-[11px] text-gray-400 leading-relaxed">
-            {language === 'bn'
-              ? 'সক্রিয় থাকলে গ্রাহকদের সুস্পষ্ট সতর্কতা ব্যানার প্রদর্শিত হবে যাতে কেউ ভুলবশত মার্চেন্ট পেমেন্ট না করে।'
-              : 'Enforces high-contrast warning badges on checkout, explicitly instructing customers that merchant payments are disallowed.'}
-          </p>
-        </div>
 
         {/* Card 1: Flat Delivery Charge Nationwide (Admin Control) */}
         <div className="p-5 rounded-2xl bg-[#12141A] border-2 border-[#D4AF37]/40 space-y-3 relative overflow-hidden shadow-lg shadow-[#D4AF37]/5">
@@ -461,7 +427,7 @@ export const PaymentSettingsTab: React.FC = () => {
                         className="px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider text-white shadow-md"
                         style={{ backgroundColor: themeBg }}
                       >
-                        {gw.gatewayName}
+                        {(language === 'bn' ? gw.nameBn : gw.nameEn) || gw.iconText || mfsKey.toUpperCase()}
                       </span>
                       <span className="text-xs font-mono text-gray-400">
                         {gw.ussdCode}
@@ -509,7 +475,9 @@ export const PaymentSettingsTab: React.FC = () => {
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <label className="block text-xs font-semibold text-gray-300">
-                        {language === 'bn' ? `${gw.gatewayName} নম্বর *` : `${gw.gatewayName} Phone Number *`}
+                        {language === 'bn'
+                          ? `${gw.nameBn || gw.iconText || mfsKey.toUpperCase()} নম্বর *`
+                          : `${gw.nameEn || gw.iconText || mfsKey.toUpperCase()} Phone Number *`}
                       </label>
                       <button
                         type="button"
@@ -680,8 +648,8 @@ export const PaymentSettingsTab: React.FC = () => {
           {!currentPreviewGw?.isActive ? (
             <div className="p-4 rounded-xl bg-red-950/20 border border-red-500/30 text-center text-xs text-red-300">
               {language === 'bn'
-                ? `🚫 ${currentPreviewGw?.gatewayName || previewGateway} বর্তমানে নিষ্ক্রিয়। চেকআউট পেজে এটি প্রদর্শিত হবে না।`
-                : `🚫 ${currentPreviewGw?.gatewayName || previewGateway} is currently INACTIVE. It is completely hidden from customer checkout.`}
+                ? `🚫 ${currentPreviewGw?.nameBn || currentPreviewGw?.nameEn || previewGateway} বর্তমানে নিষ্ক্রিয়। চেকআউট পেজে এটি প্রদর্শিত হবে না।`
+                : `🚫 ${currentPreviewGw?.nameEn || previewGateway} is currently INACTIVE. It is completely hidden from customer checkout.`}
             </div>
           ) : (
             <>
@@ -707,7 +675,7 @@ export const PaymentSettingsTab: React.FC = () => {
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-[10px] uppercase font-mono text-gray-400">
-                      Luxora BD Official {currentPreviewGw.gatewayName}
+                      Luxora BD Official {currentPreviewGw.nameEn || currentPreviewGw.iconText || previewGateway.toUpperCase()}
                     </span>
                     <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#D4AF37]/20 text-[#D4AF37] font-semibold uppercase font-mono">
                       {currentPreviewGw.accountType}

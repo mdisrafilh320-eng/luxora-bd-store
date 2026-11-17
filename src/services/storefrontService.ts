@@ -8,7 +8,7 @@ import {
   onSnapshot,
   Unsubscribe,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { CategoryItem, HeroBannerItem, ReturnPolicyConfig } from '../types';
 import heroBannerAudio from '../assets/images/hero_banner_audio_1794561216709.jpg';
 import heroBannerWearables from '../assets/images/hero_banner_wearables_1794561217318.jpg';
@@ -20,6 +20,7 @@ export const RETURN_POLICY_DOC_PATH = ['settings', 'return_policy'] as const;
 export const STOREFRONT_META_DOC_PATH = ['settings', 'storefront_meta'] as const;
 
 const CACHE_BANNERS_KEY = 'luxora_cached_banners';
+const CACHE_BANNERS_USER_MANAGED_KEY = 'luxora_banners_user_managed';
 const CACHE_CATEGORIES_KEY = 'luxora_cached_categories';
 const CACHE_RETURN_POLICY_KEY = 'luxora_cached_return_policy';
 
@@ -120,6 +121,38 @@ function setLocalCache<T>(key: string, value: T): void {
   }
 }
 
+function getLocalFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function setLocalFlag(key: string, enabled: boolean): void {
+  try {
+    if (enabled) {
+      localStorage.setItem(key, 'true');
+    } else {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+async function syncStorefrontMetaNonBlocking(patch: Record<string, unknown>): Promise<void> {
+  try {
+    await setDoc(
+      doc(db, STOREFRONT_META_DOC_PATH[0], STOREFRONT_META_DOC_PATH[1]),
+      { ...patch, updatedAt: new Date().toISOString() },
+      { merge: true }
+    );
+  } catch (metaErr) {
+    console.warn('[StorefrontService] Non-blocking storefront_meta sync notice:', metaErr);
+  }
+}
+
 export function slugifyCategory(input: string): string {
   const base = input
     .toLowerCase()
@@ -135,53 +168,128 @@ export function slugifyCategory(input: string): string {
 // ==========================================
 
 let bannersSeedChecked = false;
+let inFlightBannersSeedPromise: Promise<void> | null = null;
+
 export async function ensureInitialBannersSeeded(): Promise<void> {
   if (bannersSeedChecked) return;
-  bannersSeedChecked = true;
-  try {
-    const metaRef = doc(db, STOREFRONT_META_DOC_PATH[0], STOREFRONT_META_DOC_PATH[1]);
-    const metaSnap = await getDoc(metaRef);
-    const metaData = metaSnap.exists() ? metaSnap.data() : {};
-    if (metaData?.bannersSeeded) return;
+  if (inFlightBannersSeedPromise) return inFlightBannersSeedPromise;
 
-    const existing = await getDocs(collection(db, BANNERS_COLLECTION));
-    if (existing.empty) {
-      const now = new Date().toISOString();
-      await Promise.all(
-        DEFAULT_HERO_BANNERS.map((b) =>
-          setDoc(doc(db, BANNERS_COLLECTION, b.id), { ...b, createdAt: now, updatedAt: now })
-        )
-      );
+  inFlightBannersSeedPromise = (async () => {
+    try {
+      const metaRef = doc(db, STOREFRONT_META_DOC_PATH[0], STOREFRONT_META_DOC_PATH[1]);
+      const metaSnap = await getDoc(metaRef);
+      const metaData = metaSnap.exists() ? metaSnap.data() : {};
+      if (metaData?.bannersSeeded || metaData?.bannersCleared) {
+        setLocalFlag(CACHE_BANNERS_USER_MANAGED_KEY, true);
+        bannersSeedChecked = true;
+        return;
+      }
+
+      const existing = await getDocs(collection(db, BANNERS_COLLECTION));
+      if (existing.empty) {
+        const now = new Date().toISOString();
+        await Promise.all(
+          DEFAULT_HERO_BANNERS.map((b) =>
+            setDoc(doc(db, BANNERS_COLLECTION, b.id), { ...b, createdAt: now, updatedAt: now })
+          )
+        );
+        setLocalCache(CACHE_BANNERS_KEY, DEFAULT_HERO_BANNERS);
+      }
+      setLocalFlag(CACHE_BANNERS_USER_MANAGED_KEY, true);
+      await syncStorefrontMetaNonBlocking({ bannersSeeded: true, bannersCleared: false });
+      bannersSeedChecked = true;
+    } catch (err) {
+      console.warn('[StorefrontService] Banner initial seed notice:', err);
+    } finally {
+      inFlightBannersSeedPromise = null;
     }
-    await setDoc(metaRef, { bannersSeeded: true, updatedAt: new Date().toISOString() }, { merge: true });
-  } catch (err) {
-    console.warn('Banner initial seed notice:', err);
+  })();
+
+  return inFlightBannersSeedPromise;
+}
+
+export async function restoreDefaultBanners(): Promise<HeroBannerItem[]> {
+  if (!auth.currentUser) {
+    throw new Error('Authentication required to restore default hero banners.');
+  }
+  const now = new Date().toISOString();
+  const payload = DEFAULT_HERO_BANNERS.map((b) => ({
+    ...b,
+    createdAt: now,
+    updatedAt: now,
+  }));
+  try {
+    await Promise.all(
+      payload.map((b) => setDoc(doc(db, BANNERS_COLLECTION, b.id), b))
+    );
+    setLocalFlag(CACHE_BANNERS_USER_MANAGED_KEY, true);
+    setLocalCache(CACHE_BANNERS_KEY, payload);
+    bannersSeedChecked = true;
+    await syncStorefrontMetaNonBlocking({ bannersSeeded: true, bannersCleared: false });
+    return payload;
+  } catch (error) {
+    console.error('[StorefrontService] Failed to restore default banners:', error);
+    handleFirestoreError(error, OperationType.WRITE, BANNERS_COLLECTION);
   }
 }
 
 export function getCachedBanners(): HeroBannerItem[] {
-  return getLocalCache<HeroBannerItem[]>(CACHE_BANNERS_KEY, DEFAULT_HERO_BANNERS);
+  const isUserManaged = getLocalFlag(CACHE_BANNERS_USER_MANAGED_KEY);
+  return getLocalCache<HeroBannerItem[]>(
+    CACHE_BANNERS_KEY,
+    isUserManaged ? [] : DEFAULT_HERO_BANNERS
+  );
 }
 
 export function subscribeToBanners(
   onUpdate: (banners: HeroBannerItem[]) => void
 ): Unsubscribe {
-  ensureInitialBannersSeeded().catch(() => {});
+  let snapshotVersion = 0;
+
   try {
     return onSnapshot(
       collection(db, BANNERS_COLLECTION),
       (snapshot) => {
+        const currentVersion = ++snapshotVersion;
+
+        if (snapshot.empty) {
+          if (getLocalFlag(CACHE_BANNERS_USER_MANAGED_KEY)) {
+            setLocalCache(CACHE_BANNERS_KEY, []);
+            onUpdate([]);
+            return;
+          }
+
+          getDoc(doc(db, STOREFRONT_META_DOC_PATH[0], STOREFRONT_META_DOC_PATH[1]))
+            .then((metaSnap) => {
+              if (currentVersion !== snapshotVersion) return;
+              const metaData = metaSnap.exists() ? metaSnap.data() : {};
+              if (metaData?.bannersSeeded || metaData?.bannersCleared) {
+                setLocalFlag(CACHE_BANNERS_USER_MANAGED_KEY, true);
+                setLocalCache(CACHE_BANNERS_KEY, []);
+                onUpdate([]);
+              } else {
+                onUpdate(DEFAULT_HERO_BANNERS);
+              }
+            })
+            .catch(() => {
+              if (currentVersion !== snapshotVersion) return;
+              onUpdate(getCachedBanners());
+            });
+          return;
+        }
+
         const list: HeroBannerItem[] = [];
         snapshot.forEach((d) => {
           const data = d.data() as HeroBannerItem;
           list.push({ ...data, id: data?.id || d.id });
         });
         list.sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
+        setLocalFlag(CACHE_BANNERS_USER_MANAGED_KEY, true);
         setLocalCache(CACHE_BANNERS_KEY, list);
         onUpdate(list);
       },
       (err) => {
-        console.warn('Banner subscription fallback:', err);
+        console.warn('[StorefrontService] Banner subscription fallback:', err);
         onUpdate(getCachedBanners());
       }
     );
@@ -191,6 +299,13 @@ export function subscribeToBanners(
 }
 
 export async function addBanner(banner: Partial<HeroBannerItem>): Promise<HeroBannerItem> {
+  if (!auth.currentUser) {
+    throw new Error('You must be signed in as an admin to add a hero banner.');
+  }
+  if (inFlightBannersSeedPromise) {
+    await inFlightBannersSeedPromise;
+  }
+
   const now = new Date().toISOString();
   const cleanId = (banner.id || `banner-${Date.now().toString(36)}`).replace(/[^a-zA-Z0-9_.@-]/g, '_');
   if (!banner.imageUrl?.trim()) {
@@ -212,46 +327,94 @@ export async function addBanner(banner: Partial<HeroBannerItem>): Promise<HeroBa
     updatedAt: now,
   };
   try {
+    console.info('[StorefrontService] Creating hero banner:', cleanId);
     await setDoc(doc(db, BANNERS_COLLECTION, cleanId), payload);
-    await setDoc(
-      doc(db, STOREFRONT_META_DOC_PATH[0], STOREFRONT_META_DOC_PATH[1]),
-      { bannersSeeded: true, updatedAt: now },
-      { merge: true }
+    setLocalFlag(CACHE_BANNERS_USER_MANAGED_KEY, true);
+    const updatedCache = [...getCachedBanners().filter((b) => b.id !== cleanId), payload].sort(
+      (a, b) => (a.order ?? 99) - (b.order ?? 99)
     );
+    setLocalCache(CACHE_BANNERS_KEY, updatedCache);
+    await syncStorefrontMetaNonBlocking({ bannersSeeded: true, bannersCleared: false });
     return payload;
   } catch (error) {
+    console.error('[StorefrontService] Error adding banner:', { bannerId: cleanId, error });
     handleFirestoreError(error, OperationType.CREATE, `${BANNERS_COLLECTION}/${cleanId}`);
-    throw error;
   }
 }
 
 export async function toggleBannerActive(bannerId: string, isActive: boolean): Promise<void> {
-  const cleanId = bannerId.replace(/[^a-zA-Z0-9_.@-]/g, '_');
+  if (!auth.currentUser) {
+    throw new Error('Authentication required to update banner visibility.');
+  }
+  const cleanId = bannerId.trim().replace(/[^a-zA-Z0-9_.@-]/g, '_');
   try {
+    console.info('[StorefrontService] Toggling banner visibility:', { bannerId: cleanId, isActive });
     await setDoc(
       doc(db, BANNERS_COLLECTION, cleanId),
       { isActive, updatedAt: new Date().toISOString() },
       { merge: true }
     );
+    setLocalFlag(CACHE_BANNERS_USER_MANAGED_KEY, true);
+    const updatedCache = getCachedBanners().map((b) =>
+      b.id === cleanId ? { ...b, isActive } : b
+    );
+    setLocalCache(CACHE_BANNERS_KEY, updatedCache);
   } catch (error) {
+    console.error('[StorefrontService] Error toggling banner:', { bannerId: cleanId, error });
     handleFirestoreError(error, OperationType.UPDATE, `${BANNERS_COLLECTION}/${cleanId}`);
-    throw error;
   }
 }
 
 export async function deleteBanner(bannerId: string): Promise<void> {
-  const cleanId = bannerId.replace(/[^a-zA-Z0-9_.@-]/g, '_');
+  if (!auth.currentUser) {
+    const authErr = new Error('Authentication required: please sign in as an admin to delete hero banners.');
+    console.error('[StorefrontService] Delete banner blocked (not signed in):', bannerId);
+    throw authErr;
+  }
+
+  if (inFlightBannersSeedPromise) {
+    await inFlightBannersSeedPromise;
+  }
+
+  const cleanId = String(bannerId || '').trim().replace(/[^a-zA-Z0-9_.@-]/g, '_');
+  if (!cleanId) {
+    throw new Error('Invalid banner ID.');
+  }
+
+  console.info('[StorefrontService] Deleting hero banner from Firestore:', {
+    collection: BANNERS_COLLECTION,
+    bannerId: cleanId,
+    actor: auth.currentUser.email || auth.currentUser.uid,
+  });
+
   try {
     await deleteDoc(doc(db, BANNERS_COLLECTION, cleanId));
-    await setDoc(
-      doc(db, STOREFRONT_META_DOC_PATH[0], STOREFRONT_META_DOC_PATH[1]),
-      { bannersSeeded: true, updatedAt: new Date().toISOString() },
-      { merge: true }
-    );
   } catch (error) {
+    console.error('[StorefrontService] Firestore deleteDoc failed for banner:', {
+      bannerId: cleanId,
+      path: `${BANNERS_COLLECTION}/${cleanId}`,
+      uid: auth.currentUser.uid,
+      email: auth.currentUser.email,
+      error,
+    });
     handleFirestoreError(error, OperationType.DELETE, `${BANNERS_COLLECTION}/${cleanId}`);
-    throw error;
   }
+
+  // Mark as user-managed immediately so empty snapshot will never resurrect DEFAULT_HERO_BANNERS
+  setLocalFlag(CACHE_BANNERS_USER_MANAGED_KEY, true);
+  bannersSeedChecked = true;
+  const remaining = getCachedBanners().filter((b) => b.id !== cleanId);
+  setLocalCache(CACHE_BANNERS_KEY, remaining);
+
+  await syncStorefrontMetaNonBlocking({
+    bannersSeeded: true,
+    bannersCleared: remaining.length === 0,
+  });
+
+  console.info('[StorefrontService] Hero banner deleted successfully:', {
+    bannerId: cleanId,
+    remainingCachedCount: remaining.length,
+  });
 }
 
 // ==========================================
@@ -274,7 +437,7 @@ export async function ensureInitialCategoriesSeeded(): Promise<void> {
         DEFAULT_CATEGORIES.map((c) => setDoc(doc(db, CATEGORIES_COLLECTION, c.id), c))
       );
     }
-    await setDoc(metaRef, { categoriesSeeded: true, updatedAt: new Date().toISOString() }, { merge: true });
+    await syncStorefrontMetaNonBlocking({ categoriesSeeded: true });
   } catch (err) {
     console.warn('Category initial seed notice:', err);
   }
@@ -287,11 +450,14 @@ export function getCachedCategories(): CategoryItem[] {
 export function subscribeToCategories(
   onUpdate: (categories: CategoryItem[]) => void
 ): Unsubscribe {
-  ensureInitialCategoriesSeeded().catch(() => {});
   try {
     return onSnapshot(
       collection(db, CATEGORIES_COLLECTION),
       (snapshot) => {
+        if (snapshot.empty) {
+          onUpdate(DEFAULT_CATEGORIES);
+          return;
+        }
         const list: CategoryItem[] = [];
         snapshot.forEach((d) => {
           const data = d.data() as CategoryItem;
@@ -332,11 +498,7 @@ export async function addCategory(input: {
   };
   try {
     await setDoc(doc(db, CATEGORIES_COLLECTION, slug), payload);
-    await setDoc(
-      doc(db, STOREFRONT_META_DOC_PATH[0], STOREFRONT_META_DOC_PATH[1]),
-      { categoriesSeeded: true, updatedAt: new Date().toISOString() },
-      { merge: true }
-    );
+    await syncStorefrontMetaNonBlocking({ categoriesSeeded: true });
     return payload;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, `${CATEGORIES_COLLECTION}/${slug}`);
@@ -348,11 +510,7 @@ export async function deleteCategory(categoryId: string): Promise<void> {
   const cleanId = categoryId.replace(/[^a-zA-Z0-9_.@-]/g, '_');
   try {
     await deleteDoc(doc(db, CATEGORIES_COLLECTION, cleanId));
-    await setDoc(
-      doc(db, STOREFRONT_META_DOC_PATH[0], STOREFRONT_META_DOC_PATH[1]),
-      { categoriesSeeded: true, updatedAt: new Date().toISOString() },
-      { merge: true }
-    );
+    await syncStorefrontMetaNonBlocking({ categoriesSeeded: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `${CATEGORIES_COLLECTION}/${cleanId}`);
     throw error;
@@ -437,6 +595,7 @@ export const storefrontService = {
   addBanner,
   toggleBannerActive,
   deleteBanner,
+  restoreDefaultBanners,
   subscribeToCategories,
   addCategory,
   deleteCategory,

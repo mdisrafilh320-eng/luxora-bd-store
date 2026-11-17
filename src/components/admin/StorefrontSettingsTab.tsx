@@ -19,22 +19,60 @@ import {
   addBanner,
   deleteBanner,
   toggleBannerActive,
+  restoreDefaultBanners,
   addCategory,
   deleteCategory,
   slugifyCategory,
+  ensureInitialBannersSeeded,
+  ensureInitialCategoriesSeeded,
   DEFAULT_RETURN_POLICY,
 } from '../../services/storefrontService';
 import { ReturnPolicyConfig } from '../../types';
+
+function extractReadableError(err: unknown, fallback: string): string {
+  const raw = err instanceof Error ? err.message : String(err || '');
+  if (!raw) return fallback;
+  try {
+    if (raw.trim().startsWith('{')) {
+      const parsed = JSON.parse(raw);
+      const inner = String(parsed?.error || '');
+      if (inner.toLowerCase().includes('permission')) {
+        return 'Permission denied: Store Admin or Super Admin authorization is required to modify banners.';
+      }
+      if (inner.toLowerCase().includes('quota')) {
+        return 'Database daily quota exceeded. Please try again later.';
+      }
+      return inner || fallback;
+    }
+  } catch {
+    // ignore JSON parse errors
+  }
+  return raw;
+}
 
 export const StorefrontSettingsTab: React.FC = () => {
   const {
     language,
     banners,
+    addBannerToState,
+    removeBannerFromState,
+    updateBannerInState,
     categories,
     returnPolicy,
     updateReturnPolicy,
+    isSuperAdmin,
+    adminRole,
     addToast,
   } = useApp();
+
+  const canEditCms = isSuperAdmin || adminRole === 'admin';
+
+  useEffect(() => {
+    if (canEditCms) {
+      ensureInitialBannersSeeded().catch(() => {});
+      ensureInitialCategoriesSeeded().catch(() => {});
+    }
+  }, [canEditCms]);
 
   // ---------------- 1. BANNER MANAGEMENT STATE ----------------
   const [bannerTitleEn, setBannerTitleEn] = useState('');
@@ -47,6 +85,9 @@ export const StorefrontSettingsTab: React.FC = () => {
   const [isUploadingBannerImg, setIsUploadingBannerImg] = useState(false);
   const [bannerUploadProgress, setBannerUploadProgress] = useState(0);
   const [isAddingBanner, setIsAddingBanner] = useState(false);
+  const [deletingBannerId, setDeletingBannerId] = useState<string | null>(null);
+  const [togglingBannerId, setTogglingBannerId] = useState<string | null>(null);
+  const [isRestoringDefaults, setIsRestoringDefaults] = useState(false);
 
   const handleBannerFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -91,7 +132,7 @@ export const StorefrontSettingsTab: React.FC = () => {
 
     setIsAddingBanner(true);
     try {
-      await addBanner({
+      const created = await addBanner({
         titleEn: bannerTitleEn,
         titleBn: bannerTitleBn || bannerTitleEn,
         subtitleEn: bannerSubtitleEn,
@@ -102,6 +143,7 @@ export const StorefrontSettingsTab: React.FC = () => {
         order: banners.length + 1,
         isActive: true,
       });
+      addBannerToState(created);
 
       setBannerTitleEn('');
       setBannerTitleBn('');
@@ -116,12 +158,13 @@ export const StorefrontSettingsTab: React.FC = () => {
         titleBn: 'নতুন ব্যানার যুক্ত হয়েছে',
         descriptionEn: 'Promotional slide is now live on the home page carousel.',
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
+      console.error('[StorefrontCMS] Failed to create hero banner:', err);
       addToast({
         type: 'error',
         titleEn: 'Failed to Add Banner',
         titleBn: 'ব্যানার সংরক্ষণ ব্যর্থ',
-        descriptionEn: err?.message || 'Could not save banner to Firestore.',
+        descriptionEn: extractReadableError(err, 'Could not save banner to Firestore.'),
       });
     } finally {
       setIsAddingBanner(false);
@@ -129,33 +172,96 @@ export const StorefrontSettingsTab: React.FC = () => {
   };
 
   const handleToggleBanner = async (id: string, currentActive: boolean) => {
+    if (!canEditCms) {
+      addToast({
+        type: 'error',
+        titleEn: 'Permission Denied',
+        titleBn: 'অনুমতি নেই',
+        descriptionEn: 'Only Store Admins or Super Admins can modify banners.',
+      });
+      return;
+    }
+    if (togglingBannerId === id) return;
+    setTogglingBannerId(id);
     try {
       await toggleBannerActive(id, !currentActive);
+      updateBannerInState(id, { isActive: !currentActive });
       addToast({
         type: 'info',
         titleEn: !currentActive ? 'Banner Activated' : 'Banner Hidden',
         titleBn: !currentActive ? 'ব্যানার সক্রিয় করা হয়েছে' : 'ব্যানার লুকানো হয়েছে',
       });
-    } catch (err: any) {
-      addToast({ type: 'error', titleEn: 'Toggle Failed', titleBn: 'পরিবর্তন ব্যর্থ' });
+    } catch (err: unknown) {
+      console.error('[StorefrontCMS] Toggle banner visibility failed:', { bannerId: id, error: err });
+      addToast({
+        type: 'error',
+        titleEn: 'Toggle Failed',
+        titleBn: 'পরিবর্তন ব্যর্থ',
+        descriptionEn: extractReadableError(err, 'Could not update banner visibility.'),
+      });
+    } finally {
+      setTogglingBannerId(null);
     }
   };
 
   const handleRemoveBanner = async (id: string) => {
+    if (!canEditCms) {
+      addToast({
+        type: 'error',
+        titleEn: 'Permission Denied',
+        titleBn: 'অনুমতি নেই',
+        descriptionEn: 'Only Store Admins or Super Admins can delete hero banners.',
+      });
+      return;
+    }
+    if (!id || deletingBannerId === id) return;
+
+    setDeletingBannerId(id);
+    console.info('[StorefrontCMS] Initiating hero banner deletion:', { bannerId: id, adminRole, isSuperAdmin });
     try {
       await deleteBanner(id);
+      removeBannerFromState(id);
       addToast({
         type: 'info',
         titleEn: 'Banner Removed',
         titleBn: 'ব্যানার মুছে ফেলা হয়েছে',
+        descriptionEn: 'The slide has been removed from Firestore and the storefront slider.',
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
+      console.error('[StorefrontCMS] Hero banner deletion failed:', { bannerId: id, error: err });
       addToast({
         type: 'error',
         titleEn: 'Delete Failed',
         titleBn: 'মুছে ফেলা ব্যর্থ',
-        descriptionEn: err?.message,
+        descriptionEn: extractReadableError(err, 'Could not delete banner from Firestore.'),
       });
+    } finally {
+      setDeletingBannerId(null);
+    }
+  };
+
+  const handleRestoreDefaultBanners = async () => {
+    if (!canEditCms || isRestoringDefaults) return;
+    setIsRestoringDefaults(true);
+    try {
+      const restored = await restoreDefaultBanners();
+      restored.forEach((b) => addBannerToState(b));
+      addToast({
+        type: 'success',
+        titleEn: 'Default Slides Restored',
+        titleBn: 'ডিফল্ট ব্যানার ফিরিয়ে আনা হয়েছে',
+        descriptionEn: '3 default promotional slides added to Firestore.',
+      });
+    } catch (err: unknown) {
+      console.error('[StorefrontCMS] Failed to restore defaults:', err);
+      addToast({
+        type: 'error',
+        titleEn: 'Restore Failed',
+        titleBn: 'পুনরুদ্ধার ব্যর্থ',
+        descriptionEn: extractReadableError(err, 'Could not restore default banners.'),
+      });
+    } finally {
+      setIsRestoringDefaults(false);
     }
   };
 
@@ -441,50 +547,96 @@ export const StorefrontSettingsTab: React.FC = () => {
         </form>
 
         {/* Active Banners List */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {banners.map((b, idx) => (
-            <div
-              key={b.id}
-              className={`rounded-xl bg-[#0D0F14] border overflow-hidden flex flex-col justify-between ${
-                b.isActive ? 'border-neutral-800' : 'border-neutral-800/40 opacity-60'
-              }`}
-            >
-              <div className="relative aspect-[16/9] bg-black">
-                <img src={b.imageUrl} alt={b.titleEn || `Banner ${idx + 1}`} className="w-full h-full object-cover" />
-                <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/75 text-[10px] font-mono text-[#D4AF37]">
-                  Slide #{idx + 1}
-                </span>
-              </div>
-              <div className="p-3.5 space-y-2 text-xs">
-                <div className="font-semibold text-white truncate">
-                  {b.titleEn || 'Visual Banner Slide'}
-                </div>
-                <p className="text-[11px] text-neutral-400 truncate">
-                  {b.subtitleEn || 'Target: ' + (b.targetCategory || 'all')}
-                </p>
-                <div className="flex items-center justify-between pt-2 border-t border-neutral-800/80">
-                  <button
-                    type="button"
-                    onClick={() => handleToggleBanner(b.id, b.isActive)}
-                    className="inline-flex items-center gap-1.5 text-[11px] font-medium text-neutral-300 hover:text-[#D4AF37] cursor-pointer"
-                  >
-                    {b.isActive ? <Eye className="w-3.5 h-3.5 text-emerald-400" /> : <EyeOff className="w-3.5 h-3.5 text-neutral-500" />}
-                    <span>{b.isActive ? 'Visible' : 'Hidden'}</span>
-                  </button>
+        {banners.length === 0 ? (
+          <div className="p-8 rounded-xl bg-[#0D0F14] border border-dashed border-neutral-800 text-center space-y-3">
+            <p className="text-xs text-neutral-400">
+              {language === 'bn'
+                ? 'কোনো কাস্টম হিরো ব্যানার সংরক্ষিত নেই। নতুন ব্যানার যুক্ত করুন অথবা ডিফল্ট স্লাইড ফিরিয়ে আনুন।'
+                : 'No hero banners currently saved in Firestore. Add a new banner above or restore the default slides.'}
+            </p>
+            {canEditCms && (
+              <button
+                type="button"
+                onClick={handleRestoreDefaultBanners}
+                disabled={isRestoringDefaults}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1A1D28] hover:bg-[#242838] border border-neutral-700 text-xs font-medium text-[#D4AF37] cursor-pointer disabled:opacity-50"
+              >
+                {isRestoringDefaults ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                <span>{language === 'bn' ? 'ডিফল্ট ব্যানার ফিরিয়ে আনুন' : 'Restore Default Slides'}</span>
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {banners.map((b, idx) => {
+              const isDeleting = deletingBannerId === b.id;
+              const isToggling = togglingBannerId === b.id;
+              return (
+                <div
+                  key={b.id}
+                  className={`rounded-xl bg-[#0D0F14] border overflow-hidden flex flex-col justify-between transition-opacity ${
+                    b.isActive ? 'border-neutral-800' : 'border-neutral-800/40 opacity-60'
+                  } ${isDeleting ? 'opacity-50 pointer-events-none' : ''}`}
+                >
+                  <div className="relative aspect-[16/9] bg-black">
+                    <img src={b.imageUrl} alt={b.titleEn || `Banner ${idx + 1}`} className="w-full h-full object-cover" />
+                    <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/75 text-[10px] font-mono text-[#D4AF37]">
+                      Slide #{idx + 1}
+                    </span>
+                  </div>
+                  <div className="p-3.5 space-y-2 text-xs">
+                    <div className="font-semibold text-white truncate">
+                      {b.titleEn || 'Visual Banner Slide'}
+                    </div>
+                    <p className="text-[11px] text-neutral-400 truncate">
+                      {b.subtitleEn || 'Target: ' + (b.targetCategory || 'all')}
+                    </p>
+                    <div className="flex items-center justify-between pt-2 border-t border-neutral-800/80">
+                      <button
+                        type="button"
+                        disabled={isToggling || isDeleting || !canEditCms}
+                        onClick={() => handleToggleBanner(b.id, b.isActive)}
+                        className="inline-flex items-center gap-1.5 text-[11px] font-medium text-neutral-300 hover:text-[#D4AF37] disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                      >
+                        {isToggling ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#D4AF37]" />
+                        ) : b.isActive ? (
+                          <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <EyeOff className="w-3.5 h-3.5 text-neutral-500" />
+                        )}
+                        <span>{b.isActive ? 'Visible' : 'Hidden'}</span>
+                      </button>
 
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveBanner(b.id)}
-                    className="inline-flex items-center gap-1 text-[11px] text-rose-400 hover:text-rose-300 cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Remove</span>
-                  </button>
+                      <button
+                        type="button"
+                        disabled={isDeleting || !canEditCms}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveBanner(b.id);
+                        }}
+                        aria-label={`Remove banner ${b.titleEn || b.id}`}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isDeleting ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Removing...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Remove</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          ))}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {/* SECTION 2: MANAGE DYNAMIC CATEGORIES */}

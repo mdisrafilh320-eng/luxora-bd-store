@@ -138,10 +138,6 @@ function ChannelBadgeIcon({ channel, className = 'w-3.5 h-3.5' }: { channel: Soc
 export const OmnichannelSalesInboxTab: React.FC = () => {
   const { isAdmin, isSuperAdmin, user, language, products, addToast } = useApp();
 
-  if (!isAdmin) {
-    return null;
-  }
-
   const [conversations, setConversations] = useState<CrmConversation[]>([]);
   const [channelConfigs, setChannelConfigs] = useState<ChannelConnectionConfig[]>(DEFAULT_CHANNEL_CONFIGS);
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
@@ -190,6 +186,10 @@ export const OmnichannelSalesInboxTab: React.FC = () => {
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const composerFileInputRef = useRef<HTMLInputElement | null>(null);
   const newDmFileInputRef = useRef<HTMLInputElement | null>(null);
+  const conversationsRef = useRef<CrmConversation[]>(conversations);
+  conversationsRef.current = conversations;
+  const productsRef = useRef<Product[]>(products);
+  productsRef.current = products;
 
   // Subscribe to real-time CRM conversations & Channel configs
   useEffect(() => {
@@ -228,7 +228,7 @@ export const OmnichannelSalesInboxTab: React.FC = () => {
     let active = true;
     const poll = async () => {
       if (!active) return;
-      const count = await syncPendingWebhookEvents(conversations, products);
+      const count = await syncPendingWebhookEvents(conversationsRef.current, productsRef.current);
       if (count > 0 && active) {
         addToast({
           type: 'info',
@@ -243,7 +243,7 @@ export const OmnichannelSalesInboxTab: React.FC = () => {
       active = false;
       clearInterval(timer);
     };
-  }, [isAdmin, conversations, products, addToast]);
+  }, [isAdmin, addToast]);
 
   const selectedConversation = useMemo(
     () => conversations.find((c) => c.id === selectedConvId) || null,
@@ -603,6 +603,10 @@ export const OmnichannelSalesInboxTab: React.FC = () => {
     typeof window !== 'undefined'
       ? `${window.location.origin}/api/webhooks/omnichannel`
       : '/api/webhooks/omnichannel';
+
+  if (!isAdmin) {
+    return null;
+  }
 
   return (
     <div className="space-y-5 animate-fadeIn">

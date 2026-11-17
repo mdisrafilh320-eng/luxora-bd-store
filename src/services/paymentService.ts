@@ -5,7 +5,7 @@ import {
   onSnapshot, 
   Unsubscribe 
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { PaymentSettings, MfsGatewayConfig, MfsAccountType } from '../types';
 
 const SETTINGS_COLLECTION = 'settings';
@@ -156,11 +156,13 @@ export async function getPaymentSettings(): Promise<PaymentSettings> {
       };
     }
 
-    // Document doesn't exist yet in Firestore, save initial defaults
-    try {
-      await setDoc(docRef, DEFAULT_PAYMENT_SETTINGS);
-    } catch (saveErr) {
-      console.warn('Initial payment settings seeding skipped:', saveErr);
+    // Document doesn't exist yet in Firestore; only attempt seeding when signed in
+    if (auth.currentUser) {
+      try {
+        await setDoc(docRef, DEFAULT_PAYMENT_SETTINGS);
+      } catch (saveErr) {
+        console.warn('Initial payment settings seeding skipped:', saveErr);
+      }
     }
 
     return DEFAULT_PAYMENT_SETTINGS;

@@ -85,10 +85,6 @@ function ChannelIcon({ channel, className = 'w-4 h-4' }: { channel: SocialChanne
 export const OmnichannelSettingsTab: React.FC = () => {
   const { isAdmin, language, products, addToast } = useApp();
 
-  if (!isAdmin) {
-    return null;
-  }
-
   const [configs, setConfigs] = useState<ChannelConnectionConfig[]>(DEFAULT_CHANNEL_CONFIGS);
   const [sharedVerifyToken, setSharedVerifyToken] = useState('luxora-omnichannel-verify');
   const [revealedFields, setRevealedFields] = useState<Record<string, boolean>>({});
@@ -257,6 +253,10 @@ export const OmnichannelSettingsTab: React.FC = () => {
     typeof window !== 'undefined'
       ? `${window.location.origin}/api/webhooks/omnichannel`
       : '/api/webhooks/omnichannel';
+
+  if (!isAdmin) {
+    return null;
+  }
 
   return (
     <div className="space-y-6 animate-fadeIn">

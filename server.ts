@@ -350,21 +350,29 @@ app.post("/api/ai/chat", async (req, res) => {
 
     // If Gemini API Key is configured on the server
     if (aiClient) {
+      const formattedHistory = Array.isArray(history)
+        ? history
+            .filter(
+              (turn: any) =>
+                turn &&
+                (turn.role === "user" || turn.role === "model" || turn.role === "assistant") &&
+                typeof turn.content === "string" &&
+                turn.content.trim().length > 0
+            )
+            .slice(-10)
+            .map((turn: any) => ({
+              role: turn.role === "assistant" ? "model" : (turn.role as "user" | "model"),
+              parts: [{ text: turn.content.trim() }],
+            }))
+        : [];
+
       const chat = aiClient.chats.create({
         model: "gemini-4-hydrogen",
+        history: formattedHistory,
         config: {
           systemInstruction: SYSTEM_INSTRUCTION + `\nPreferred customer language: ${language === 'bn' ? 'Bengali (বাংলা)' : 'English'}.`,
         },
       });
-
-      // Pass previous turns if any
-      if (Array.isArray(history) && history.length > 0) {
-        for (const turn of history) {
-          if (turn.role === 'user' && turn.content) {
-            // Note: chat session state
-          }
-        }
-      }
 
       const response = await chat.sendMessage({ message });
       const reply = response.text || "";

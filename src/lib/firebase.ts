@@ -111,18 +111,17 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 }
 
 /**
- * Validate Firestore cloud connection on application boot
+ * Validate Firestore cloud availability on application boot
+ * without triggering unauthorized reads against restricted paths.
  */
 export async function validateFirestoreConnection(): Promise<boolean> {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    return true;
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firestore offline status:', error.message);
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      return false;
     }
-    // Return true since connection test document may not exist
-    return true;
+    return Boolean(db);
+  } catch {
+    return false;
   }
 }
 

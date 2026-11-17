@@ -51,11 +51,11 @@ service cloud.firestore {
     }
 
     function isManagerOrSuperAdmin() {
-      return hasAdminRole(['super_admin', 'admin', 'supervisor']);
+      return hasAdminRole(['super_admin', 'admin', 'store_admin', 'supervisor']);
     }
 
     function isAdmin() {
-      return hasAdminRole(['super_admin', 'admin', 'supervisor', 'staff']);
+      return hasAdminRole(['super_admin', 'admin', 'store_admin', 'supervisor', 'staff']);
     }
 
     // --- USERS COLLECTION (Owner-Only PII Isolation + Manager/Super Admin Read) ---
@@ -136,11 +136,15 @@ service cloud.firestore {
       allow create, update, delete: if isValidId(adminId) && isSuperAdmin();
     }
 
-    // --- SETTINGS COLLECTION (Public Storefront Read; Super Admin Write/Delete) ---
+    // --- SETTINGS COLLECTION (Public Storefront Read; Storefront Meta & Return Policy Manager+; Payment Super Admin Only) ---
     match /settings/{settingId} {
       allow get: if isValidId(settingId);
       allow list: if isAdmin();
-      allow create, update, delete: if isValidId(settingId) && isSuperAdmin();
+      allow create, update, delete: if isValidId(settingId) && (
+        (settingId == 'storefront_meta' || settingId == 'return_policy')
+          ? isManagerOrSuperAdmin()
+          : isSuperAdmin()
+      );
     }
 
     // --- OMNICHANNEL AI SALES INBOX CONVERSATIONS (Admin Only) ---

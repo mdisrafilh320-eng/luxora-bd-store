@@ -137,8 +137,10 @@ export const AdminERPView: React.FC = () => {
     inStock: true,
     stockCount: 15,
     freeDelivery: false,
-    warranty: '2 Years Official Luxora Warranty',
-    returnPolicy: '7 Days Hassle-Free Replacement',
+    warrantyEn: '2 Years Official Luxora Warranty',
+    warrantyBn: '২ বছরের অফিসিয়াল লাক্সোরা ওয়ারেন্টি',
+    returnPolicyEn: '7 Days Hassle-Free Replacement',
+    returnPolicyBn: '৭ দিনের রিপ্লেসমেন্ট গ্যারান্টি',
     badge: 'new',
   });
 
