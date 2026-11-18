@@ -2,13 +2,23 @@ import {
   collection,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
+  getDocsFromServer,
   setDoc,
   deleteDoc,
   onSnapshot,
   Unsubscribe,
 } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
+import {
+  safeGetItem,
+  safeGetJSON,
+  safeRemoveItem,
+  safeSetItem,
+  safeSetJSON,
+  STORAGE_KEYS,
+} from '../utils/storage';
 import { CategoryItem, HeroBannerItem, ReturnPolicyConfig } from '../types';
 import heroBannerAudio from '../assets/images/hero_banner_audio_1794561216709.jpg';
 import heroBannerWearables from '../assets/images/hero_banner_wearables_1794561217318.jpg';
@@ -19,10 +29,10 @@ export const CATEGORIES_COLLECTION = 'categories';
 export const RETURN_POLICY_DOC_PATH = ['settings', 'return_policy'] as const;
 export const STOREFRONT_META_DOC_PATH = ['settings', 'storefront_meta'] as const;
 
-const CACHE_BANNERS_KEY = 'luxora_cached_banners';
-const CACHE_BANNERS_USER_MANAGED_KEY = 'luxora_banners_user_managed';
-const CACHE_CATEGORIES_KEY = 'luxora_cached_categories';
-const CACHE_RETURN_POLICY_KEY = 'luxora_cached_return_policy';
+const CACHE_BANNERS_KEY = STORAGE_KEYS.CACHED_BANNERS;
+const CACHE_BANNERS_USER_MANAGED_KEY = STORAGE_KEYS.BANNERS_USER_MANAGED;
+const CACHE_CATEGORIES_KEY = STORAGE_KEYS.CACHED_CATEGORIES;
+const CACHE_RETURN_POLICY_KEY = STORAGE_KEYS.CACHED_RETURN_POLICY;
 
 export const DEFAULT_HERO_BANNERS: HeroBannerItem[] = [
   {
@@ -104,40 +114,22 @@ export const DEFAULT_RETURN_POLICY: ReturnPolicyConfig = {
 };
 
 function getLocalCache<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw) return JSON.parse(raw) as T;
-  } catch {
-    // ignore
-  }
-  return fallback;
+  return safeGetJSON<T>(key, fallback);
 }
 
 function setLocalCache<T>(key: string, value: T): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // ignore
-  }
+  safeSetJSON<T>(key, value, 750_000);
 }
 
 function getLocalFlag(key: string): boolean {
-  try {
-    return localStorage.getItem(key) === 'true';
-  } catch {
-    return false;
-  }
+  return safeGetItem(key) === 'true';
 }
 
 function setLocalFlag(key: string, enabled: boolean): void {
-  try {
-    if (enabled) {
-      localStorage.setItem(key, 'true');
-    } else {
-      localStorage.removeItem(key);
-    }
-  } catch {
-    // ignore
+  if (enabled) {
+    safeSetItem(key, 'true');
+  } else {
+    safeRemoveItem(key);
   }
 }
 
@@ -169,6 +161,20 @@ export function slugifyCategory(input: string): string {
 
 let bannersSeedChecked = false;
 let inFlightBannersSeedPromise: Promise<void> | null = null;
+let categoriesSeedChecked = false;
+
+export function resetStorefrontSeedFlags(): void {
+  bannersSeedChecked = false;
+  categoriesSeedChecked = false;
+}
+
+export function clearStorefrontCaches(): void {
+  safeRemoveItem(CACHE_BANNERS_KEY);
+  safeRemoveItem(CACHE_BANNERS_USER_MANAGED_KEY);
+  safeRemoveItem(CACHE_CATEGORIES_KEY);
+  safeRemoveItem(CACHE_RETURN_POLICY_KEY);
+  resetStorefrontSeedFlags();
+}
 
 export async function ensureInitialBannersSeeded(): Promise<void> {
   if (bannersSeedChecked) return;
@@ -241,6 +247,57 @@ export function getCachedBanners(): HeroBannerItem[] {
   );
 }
 
+async function readStorefrontMetaPreferServer() {
+  const metaRef = doc(db, STOREFRONT_META_DOC_PATH[0], STOREFRONT_META_DOC_PATH[1]);
+  try {
+    return await getDocFromServer(metaRef);
+  } catch {
+    return await getDoc(metaRef);
+  }
+}
+
+export async function fetchBannersFromServer(): Promise<HeroBannerItem[]> {
+  try {
+    const colRef = collection(db, BANNERS_COLLECTION);
+    let snap;
+    try {
+      snap = await getDocsFromServer(colRef);
+    } catch {
+      snap = await getDocs(colRef);
+    }
+
+    if (snap.empty) {
+      if (getLocalFlag(CACHE_BANNERS_USER_MANAGED_KEY)) {
+        setLocalCache(CACHE_BANNERS_KEY, []);
+        return [];
+      }
+      try {
+        const metaSnap = await readStorefrontMetaPreferServer();
+        const metaData = metaSnap.exists() ? metaSnap.data() : {};
+        if (metaData?.bannersSeeded || metaData?.bannersCleared) {
+          setLocalFlag(CACHE_BANNERS_USER_MANAGED_KEY, true);
+          setLocalCache(CACHE_BANNERS_KEY, []);
+          return [];
+        }
+      } catch {}
+      return DEFAULT_HERO_BANNERS;
+    }
+
+    const list: HeroBannerItem[] = [];
+    snap.forEach((d) => {
+      const data = d.data() as HeroBannerItem;
+      list.push({ ...data, id: data?.id || d.id });
+    });
+    list.sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
+    setLocalFlag(CACHE_BANNERS_USER_MANAGED_KEY, true);
+    setLocalCache(CACHE_BANNERS_KEY, list);
+    return list;
+  } catch (err) {
+    console.warn('[StorefrontService] Banner server fetch fallback:', err);
+    return getCachedBanners();
+  }
+}
+
 export function subscribeToBanners(
   onUpdate: (banners: HeroBannerItem[]) => void
 ): Unsubscribe {
@@ -259,7 +316,7 @@ export function subscribeToBanners(
             return;
           }
 
-          getDoc(doc(db, STOREFRONT_META_DOC_PATH[0], STOREFRONT_META_DOC_PATH[1]))
+          readStorefrontMetaPreferServer()
             .then((metaSnap) => {
               if (currentVersion !== snapshotVersion) return;
               const metaData = metaSnap.exists() ? metaSnap.data() : {};
@@ -421,7 +478,6 @@ export async function deleteBanner(bannerId: string): Promise<void> {
 // 2. DYNAMIC CATEGORIES MANAGEMENT
 // ==========================================
 
-let categoriesSeedChecked = false;
 export async function ensureInitialCategoriesSeeded(): Promise<void> {
   if (categoriesSeedChecked) return;
   categoriesSeedChecked = true;
@@ -445,6 +501,32 @@ export async function ensureInitialCategoriesSeeded(): Promise<void> {
 
 export function getCachedCategories(): CategoryItem[] {
   return getLocalCache<CategoryItem[]>(CACHE_CATEGORIES_KEY, DEFAULT_CATEGORIES);
+}
+
+export async function fetchCategoriesFromServer(): Promise<CategoryItem[]> {
+  try {
+    const colRef = collection(db, CATEGORIES_COLLECTION);
+    let snap;
+    try {
+      snap = await getDocsFromServer(colRef);
+    } catch {
+      snap = await getDocs(colRef);
+    }
+    if (snap.empty) {
+      return DEFAULT_CATEGORIES;
+    }
+    const list: CategoryItem[] = [];
+    snap.forEach((d) => {
+      const data = d.data() as CategoryItem;
+      list.push({ ...data, id: data?.id || d.id, slug: data?.slug || d.id });
+    });
+    list.sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
+    setLocalCache(CACHE_CATEGORIES_KEY, list);
+    return list;
+  } catch (err) {
+    console.warn('Category server fetch fallback:', err);
+    return getCachedCategories();
+  }
 }
 
 export function subscribeToCategories(
@@ -525,6 +607,33 @@ export function getCachedReturnPolicy(): ReturnPolicyConfig {
   return getLocalCache<ReturnPolicyConfig>(CACHE_RETURN_POLICY_KEY, DEFAULT_RETURN_POLICY);
 }
 
+export async function fetchReturnPolicyFromServer(): Promise<ReturnPolicyConfig> {
+  try {
+    const docRef = doc(db, RETURN_POLICY_DOC_PATH[0], RETURN_POLICY_DOC_PATH[1]);
+    let snap;
+    try {
+      snap = await getDocFromServer(docRef);
+    } catch {
+      snap = await getDoc(docRef);
+    }
+    if (snap.exists()) {
+      const data = snap.data() as ReturnPolicyConfig;
+      const merged: ReturnPolicyConfig = {
+        ...DEFAULT_RETURN_POLICY,
+        ...data,
+        stepsEn: Array.isArray(data.stepsEn) && data.stepsEn.length > 0 ? data.stepsEn : DEFAULT_RETURN_POLICY.stepsEn,
+        stepsBn: Array.isArray(data.stepsBn) && data.stepsBn.length > 0 ? data.stepsBn : DEFAULT_RETURN_POLICY.stepsBn,
+      };
+      setLocalCache(CACHE_RETURN_POLICY_KEY, merged);
+      return merged;
+    }
+    return getCachedReturnPolicy();
+  } catch (err) {
+    console.warn('Return policy server fetch fallback:', err);
+    return getCachedReturnPolicy();
+  }
+}
+
 export function subscribeToReturnPolicy(
   onUpdate: (policy: ReturnPolicyConfig) => void
 ): Unsubscribe {
@@ -592,13 +701,18 @@ export const storefrontService = {
   DEFAULT_CATEGORIES,
   DEFAULT_RETURN_POLICY,
   subscribeToBanners,
+  fetchBannersFromServer,
   addBanner,
   toggleBannerActive,
   deleteBanner,
   restoreDefaultBanners,
   subscribeToCategories,
+  fetchCategoriesFromServer,
   addCategory,
   deleteCategory,
   subscribeToReturnPolicy,
+  fetchReturnPolicyFromServer,
   saveReturnPolicy,
+  resetStorefrontSeedFlags,
+  clearStorefrontCaches,
 };

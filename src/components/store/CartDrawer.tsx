@@ -140,12 +140,16 @@ export const CartDrawer: React.FC = () => {
                         className="flex gap-3 sm:gap-3.5 bg-[#14141A] border border-[#22222C] p-3 rounded-xl relative group"
                       >
                         {/* Product Thumbnail */}
-                        <img
-                          src={item.product.image}
-                          alt={productTitle}
-                          referrerPolicy="no-referrer"
-                          className="w-20 h-20 object-cover rounded-lg border border-white/5 bg-black shrink-0"
-                        />
+                        {item.product.image?.trim() ? (
+                          <img
+                            src={item.product.image}
+                            alt={productTitle}
+                            referrerPolicy="no-referrer"
+                            className="w-20 h-20 object-cover rounded-lg border border-white/5 bg-black shrink-0"
+                          />
+                        ) : (
+                          <div className="w-20 h-20 rounded-lg border border-white/5 bg-black shrink-0" />
+                        )}
 
                         {/* Product Details */}
                         <div className="flex-1 min-w-0 flex flex-col justify-between">

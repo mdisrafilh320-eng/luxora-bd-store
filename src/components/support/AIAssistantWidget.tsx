@@ -21,19 +21,29 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { auth } from '../../lib/firebase';
 import { 
   ChatMessage, 
   QUICK_SUGGESTIONS, 
   sendChatMessageToAI, 
+  getOrCreateWebChatSessionId,
   QuickSuggestion 
 } from '../../services/aiAssistantService';
 
 export const AIAssistantWidget: React.FC = () => {
-  const { language, t, setActiveView } = useApp();
+  const { language, setActiveView } = useApp();
 
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [inputText, setInputText] = useState('');
+  const [visitorPhone, setVisitorPhone] = useState(() => {
+    try {
+      return localStorage.getItem('luxora_webchat_phone') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [showPhonePrompt, setShowPhonePrompt] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     return [
@@ -80,7 +90,14 @@ export const AIAssistantWidget: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const aiReply = await sendChatMessageToAI(text, messages, language);
+      const sessionId = getOrCreateWebChatSessionId();
+      const visitorName = auth.currentUser?.displayName || 'Website Visitor';
+      const aiReply = await sendChatMessageToAI(text, messages, language, {
+        sessionId,
+        visitorName,
+        visitorPhone: visitorPhone.trim() || undefined,
+        syncToInbox: true,
+      });
       const assistantMessage: ChatMessage = {
         id: `ai-${Date.now()}`,
         sender: 'assistant',
@@ -351,29 +368,66 @@ export const AIAssistantWidget: React.FC = () => {
                     </button>
                   </form>
 
+                  {/* Optional Visitor Phone Bar for Live Agent Follow-up */}
+                  {showPhonePrompt && (
+                    <div className="flex items-center gap-2 pt-1">
+                      <input
+                        type="tel"
+                        value={visitorPhone}
+                        onChange={(e) => {
+                          setVisitorPhone(e.target.value);
+                          try {
+                            localStorage.setItem('luxora_webchat_phone', e.target.value);
+                          } catch {
+                            // ignore
+                          }
+                        }}
+                        placeholder={language === 'bn' ? 'আপনার মোবাইল নম্বর (017...)' : 'Your BD Mobile (017...)'}
+                        className="flex-1 bg-[#0C0C10] border border-[#2A2A38] focus:border-[#D4AF37] rounded-lg px-2.5 py-1.5 text-[11px] text-white placeholder-gray-500 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPhonePrompt(false)}
+                        className="px-2.5 py-1.5 rounded-lg bg-[#D4AF37]/15 text-[#D4AF37] text-[10px] font-bold hover:bg-[#D4AF37]/25 cursor-pointer"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  )}
+
                   {/* Direct Contact Bridge */}
                   <div className="flex items-center justify-between text-[10px] text-gray-500 pt-1">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setShowPhonePrompt((p) => !p)}
+                        className="text-sky-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <Phone className="w-3 h-3" />
+                        <span>{visitorPhone ? visitorPhone : language === 'bn' ? 'নম্বর দিন' : 'Add Phone'}</span>
+                      </button>
+                      <span>•</span>
                       <a
                         href="https://wa.me/8801871693050"
                         target="_blank"
                         rel="noreferrer"
                         className="text-emerald-400 hover:underline flex items-center gap-1 font-mono font-medium"
                       >
-                        <span>WhatsApp (01871693050)</span>
+                        <span>WhatsApp</span>
                       </a>
                       <span>•</span>
                       <button
+                        type="button"
                         onClick={() => {
                           setIsOpen(false);
                           setActiveView('track');
                         }}
-                        className="text-[#D4AF37] hover:underline"
+                        className="text-[#D4AF37] hover:underline cursor-pointer"
                       >
-                        {language === 'bn' ? 'অর্ডার ট্র্যাক করুন' : 'Track Orders'}
+                        {language === 'bn' ? 'অর্ডার ট্র্যাক' : 'Track Orders'}
                       </button>
                     </div>
-                    <span className="font-mono">Powered by Gemini AI</span>
+                    <span className="font-mono">Luxora Live AI</span>
                   </div>
                 </div>
               </>

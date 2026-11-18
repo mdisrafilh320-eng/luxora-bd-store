@@ -50,7 +50,25 @@ import {
   getCachedBanners,
   getCachedCategories,
   getCachedReturnPolicy,
+  fetchBannersFromServer,
+  fetchCategoriesFromServer,
+  fetchReturnPolicyFromServer,
+  resetStorefrontSeedFlags,
 } from '../services/storefrontService';
+import {
+  initVersionedCache,
+  safeGetItem,
+  safeSetItem,
+  safeGetJSON,
+  safeSetJSON,
+  safeRemoveItem,
+  clearVolatileCaches,
+  clearSessionCaches,
+  STORAGE_KEYS,
+} from '../utils/storage';
+
+// Run versioned cache migration/cleanup once before initial React state hydration
+initVersionedCache();
 
 interface AppContextType {
   // Language & Localization
@@ -148,6 +166,10 @@ interface AppContextType {
   updateReturnPolicy: (newPolicy: ReturnPolicyConfig) => Promise<void>;
   isReturnPolicyModalOpen: boolean;
   setIsReturnPolicyModalOpen: (open: boolean) => void;
+
+  // Cross-Device Cache & Real-Time State Synchronization
+  isSyncingState: boolean;
+  forceSyncAllState: (options?: { silent?: boolean }) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -157,21 +179,13 @@ const FREE_DELIVERY_THRESHOLD = 5000; // 5,000 BDT
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Language state (persisted)
   const [language, setLanguageState] = useState<Language>(() => {
-    try {
-      const saved = localStorage.getItem('luxora_lang');
-      return (saved === 'bn' || saved === 'en') ? saved : 'en';
-    } catch {
-      return 'en';
-    }
+    const saved = safeGetItem(STORAGE_KEYS.LANG);
+    return (saved === 'bn' || saved === 'en') ? saved : 'en';
   });
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
-    try {
-      localStorage.setItem('luxora_lang', lang);
-    } catch {
-      // ignore
-    }
+    safeSetItem(STORAGE_KEYS.LANG, lang);
   };
 
   const toggleLanguage = () => {
@@ -236,7 +250,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const refreshProducts = useCallback(async () => {
     setIsLoadingProducts(true);
     try {
-      const data = await getProducts();
+      const data = await getProducts(true);
       if (Array.isArray(data)) {
         setProducts(sortProductsForCatalogDisplay(data));
       }
@@ -247,32 +261,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
+  // Incrementing nonce forces clean teardown and re-mount of Firestore snapshot subscriptions
+  const [syncNonce, setSyncNonce] = useState<number>(0);
+  const [isSyncingState, setIsSyncingState] = useState<boolean>(false);
+
   useEffect(() => {
     validateFirestoreConnection();
-    // Single real-time onSnapshot listener handles initial load + live cloud updates without duplicate full-collection reads
-    const unsubscribe = subscribeToProducts((liveProducts) => {
-      if (Array.isArray(liveProducts)) {
-        setProducts(liveProducts);
-      }
-    });
+  }, [syncNonce]);
 
-    return () => {
-      unsubscribe();
-    };
-  }, []);
-
-  // Cart state (persisted, zero-state clean)
+  // Cart state (persisted, quota-safe)
   const [cart, setCart] = useState<CartItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('luxora_cart');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.filter((item) => item && item.product && item.product.id && typeof item.product.price === 'number');
-        }
-      }
-    } catch {
-      // fallback
+    const parsed = safeGetJSON<CartItem[]>(STORAGE_KEYS.CART, []);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((item) => item && item.product && item.product.id && typeof item.product.price === 'number');
     }
     return [];
   });
@@ -280,25 +281,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isCartOpen, setIsCartOpen] = useState(false);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('luxora_cart', JSON.stringify(cart));
-    } catch {
-      // ignore
-    }
+    safeSetJSON(STORAGE_KEYS.CART, cart);
   }, [cart]);
 
-  // Wishlist state (persisted, zero-state clean)
+  // Wishlist state (persisted, quota-safe)
   const [wishlist, setWishlist] = useState<Product[]>(() => {
-    try {
-      const saved = localStorage.getItem('luxora_wishlist');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.filter((p) => p && p.id && p.nameEn);
-        }
-      }
-    } catch {
-      // fallback
+    const parsed = safeGetJSON<Product[]>(STORAGE_KEYS.WISHLIST, []);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((p) => p && p.id && p.nameEn);
     }
     return [];
   });
@@ -306,22 +296,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isWishlistOpen, setIsWishlistOpen] = useState(false);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('luxora_wishlist', JSON.stringify(wishlist));
-    } catch {
-      // ignore
-    }
+    safeSetJSON(STORAGE_KEYS.WISHLIST, wishlist);
   }, [wishlist]);
 
   // Firebase User Auth State
   const [user, setUser] = useState<UserProfile | null>(() => {
-    try {
-      const saved = localStorage.getItem('luxora_user');
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // fallback
-    }
-    return null;
+    return safeGetJSON<UserProfile | null>(STORAGE_KEYS.USER, null);
   });
 
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -329,6 +309,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const languageRef = useRef(language);
   languageRef.current = language;
+  const lastAuthUidRef = useRef<string | null>(null);
 
   // Check redirect result and subscribe to Firebase Auth changes (never re-subscribe on language toggle)
   useEffect(() => {
@@ -337,38 +318,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .then((profile) => {
         if (profile) {
           setUser(profile);
-          try {
-            localStorage.setItem('luxora_user', JSON.stringify(profile));
-          } catch {}
+          safeSetJSON(STORAGE_KEYS.USER, profile);
         }
       })
       .catch((err) => console.warn('Redirect check on mount:', err));
 
     const unsubscribe = subscribeToAuthState(async (fbUser) => {
       setIsAuthLoading(true);
+      const nextUid = fbUser?.uid || null;
+      const prevUid = lastAuthUidRef.current;
+
+      // Clear per-session caches whenever account changes or signs out
+      if (prevUid !== null && prevUid !== nextUid) {
+        clearSessionCaches();
+      }
+      lastAuthUidRef.current = nextUid;
+
       if (fbUser) {
         try {
           const pendingSync = getPendingRegistrationSync(fbUser.uid);
-          let profile = pendingSync ? await pendingSync : await getUserProfile(fbUser.uid);
+          // Fetch fresh server profile when switching accounts or logging in
+          let profile = pendingSync ? await pendingSync : await getUserProfile(fbUser.uid, true);
           if (!profile) {
             profile = await syncUserProfile(fbUser, { language: languageRef.current });
           }
           setUser(profile);
-          try {
-            localStorage.setItem('luxora_user', JSON.stringify(profile));
-          } catch {}
+          safeSetJSON(STORAGE_KEYS.USER, profile);
         } catch (error) {
           console.warn('Firestore profile lookup fallback activated:', error);
-          let fallbackProfile: UserProfile | null = null;
-          try {
-            const cachedRaw = localStorage.getItem('luxora_user');
-            if (cachedRaw) {
-              const parsed = JSON.parse(cachedRaw) as UserProfile;
-              if (parsed && parsed.id === fbUser.uid) {
-                fallbackProfile = parsed;
-              }
-            }
-          } catch {}
+          const cached = safeGetJSON<UserProfile | null>(STORAGE_KEYS.USER, null);
+          let fallbackProfile: UserProfile | null =
+            cached && cached.id === fbUser.uid ? cached : null;
 
           if (!fallbackProfile) {
             fallbackProfile = {
@@ -389,12 +369,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       } else {
         setUser(null);
-        try {
-          localStorage.removeItem('luxora_user');
-          localStorage.removeItem('luxora_guest_session');
-        } catch {
-          // ignore
-        }
+        clearSessionCaches();
       }
       setIsAuthLoading(false);
     });
@@ -469,6 +444,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const handleLogout = async () => {
     await fbLogoutUser();
     setUser(null);
+    setIsAdminState(false);
+    setIsSuperAdmin(false);
+    setAdminRole(null);
+    clearSessionCaches();
+    setSyncNonce((n) => n + 1);
     addToast({
       type: 'info',
       titleEn: 'Signed Out',
@@ -574,12 +554,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Eliminate any legacy localStorage overrides
   useEffect(() => {
-    try {
-      localStorage.removeItem('luxora_admin_override');
-    } catch {}
+    safeRemoveItem(STORAGE_KEYS.ADMIN_OVERRIDE);
   }, []);
 
-  const verifyUserAdminStatus = useCallback(async (targetUser: UserProfile | null, authReady: boolean) => {
+  const verifyUserAdminStatus = useCallback(async (targetUser: UserProfile | null, authReady: boolean, forceServer = false) => {
     if (!authReady) {
       setIsCheckingAdminStatus(true);
       return;
@@ -605,7 +583,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setIsCheckingAdminStatus(true);
     try {
-      const res = await adminRbacService.verifyAdminAccess(verifiedEmail, fbUser.uid);
+      const res = await adminRbacService.verifyAdminAccess(verifiedEmail, fbUser.uid, { forceServer });
       setIsAdminState(res.isAdmin);
       setIsSuperAdmin(res.isSuperAdmin);
       setAdminRole(res.isAdmin && res.role !== 'none' ? res.role : null);
@@ -619,13 +597,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
+  // Real-time role subscription synced across devices/browsers
   useEffect(() => {
-    verifyUserAdminStatus(user, !isAuthLoading);
-  }, [user, isAuthLoading, verifyUserAdminStatus]);
+    if (isAuthLoading) {
+      setIsCheckingAdminStatus(true);
+      return;
+    }
 
-  const refreshAdminStatus = async () => {
-    await verifyUserAdminStatus(user, !isAuthLoading);
-  };
+    const fbUser = auth.currentUser;
+    if (!fbUser || !user || user.isGuest || fbUser.uid !== user.id) {
+      setIsAdminState(false);
+      setIsSuperAdmin(false);
+      setAdminRole(null);
+      setIsCheckingAdminStatus(false);
+      return;
+    }
+
+    const verifiedEmail = fbUser.email || user.email;
+    setIsCheckingAdminStatus(true);
+
+    const unsubscribeRole = adminRbacService.subscribeToUserAdminAccess(
+      verifiedEmail,
+      fbUser.uid,
+      (status) => {
+        setIsAdminState(status.isAdmin);
+        setIsSuperAdmin(status.isSuperAdmin);
+        setAdminRole(status.isAdmin && status.role !== 'none' ? status.role : null);
+        setIsCheckingAdminStatus(false);
+      }
+    );
+
+    return () => {
+      unsubscribeRole();
+    };
+  }, [user?.id, user?.email, user?.isGuest, isAuthLoading, syncNonce]);
+
+  const refreshAdminStatus = useCallback(async () => {
+    await verifyUserAdminStatus(user, !isAuthLoading, true);
+  }, [user, isAuthLoading, verifyUserAdminStatus]);
 
   const setIsAdmin = (value: boolean) => {
     if (!isAdmin) {
@@ -664,32 +673,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Payment Gateway Settings (Dynamic MFS)
-  const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>(DEFAULT_PAYMENT_SETTINGS);
+  const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>(() =>
+    paymentService.getCachedPaymentSettings()
+  );
   const [isLoadingPaymentSettings, setIsLoadingPaymentSettings] = useState<boolean>(true);
 
-  // Subscribe to real-time Payment Gateway settings from Firestore
-  useEffect(() => {
-    const unsubscribe = paymentService.subscribeToPaymentSettings((settings) => {
-      setPaymentSettings(settings);
-      setIsLoadingPaymentSettings(false);
-    });
+  const authSessionKey = user && !user.isGuest ? user.id : 'anon';
 
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
-  }, []);
-
-  const refreshPaymentSettings = async () => {
+  const refreshPaymentSettings = useCallback(async () => {
     setIsLoadingPaymentSettings(true);
     try {
-      const settings = await paymentService.getPaymentSettings();
+      const settings = await paymentService.getPaymentSettings(true);
       setPaymentSettings(settings);
     } catch (err) {
       console.warn('Manual payment settings refresh error:', err);
     } finally {
       setIsLoadingPaymentSettings(false);
     }
-  };
+  }, []);
 
   const updatePaymentSettings = async (newSettings: PaymentSettings) => {
     setIsLoadingPaymentSettings(true);
@@ -740,7 +741,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   }, []);
 
+  // Re-bind all real-time Firestore listeners cleanly on auth changes or manual/network resync
   useEffect(() => {
+    const unsubProducts = subscribeToProducts((liveProducts) => {
+      if (Array.isArray(liveProducts)) {
+        setProducts(liveProducts);
+      }
+    });
+    const unsubPayment = paymentService.subscribeToPaymentSettings((settings) => {
+      setPaymentSettings(settings);
+      setIsLoadingPaymentSettings(false);
+    });
     const unsubBanners = subscribeToBanners((liveBanners) => {
       setBanners(liveBanners);
     });
@@ -752,11 +763,110 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     return () => {
+      unsubProducts();
+      unsubPayment();
       unsubBanners();
       unsubCategories();
       unsubPolicy();
     };
-  }, []);
+  }, [authSessionKey, syncNonce]);
+
+  const inFlightForceSyncRef = useRef<Promise<void> | null>(null);
+  const lastSyncTimestampRef = useRef<number>(Date.now());
+
+  const forceSyncAllState = useCallback(
+    async (options: { silent?: boolean } = {}) => {
+      if (inFlightForceSyncRef.current) {
+        return inFlightForceSyncRef.current;
+      }
+
+      const task = (async () => {
+        setIsSyncingState(true);
+        try {
+          clearVolatileCaches();
+          resetStorefrontSeedFlags();
+
+          const [liveProducts, liveBanners, liveCategories, livePolicy, livePayments] =
+            await Promise.all([
+              getProducts(true),
+              fetchBannersFromServer(),
+              fetchCategoriesFromServer(),
+              fetchReturnPolicyFromServer(),
+              paymentService.getPaymentSettings(true),
+              refreshAdminStatus(),
+            ]);
+
+          if (Array.isArray(liveProducts)) {
+            setProducts(sortProductsForCatalogDisplay(liveProducts));
+          }
+          if (Array.isArray(liveBanners)) {
+            setBanners(liveBanners);
+          }
+          if (Array.isArray(liveCategories)) {
+            setCategories(liveCategories);
+          }
+          if (livePolicy) {
+            setReturnPolicy(livePolicy);
+          }
+          if (livePayments) {
+            setPaymentSettings(livePayments);
+          }
+
+          lastSyncTimestampRef.current = Date.now();
+          setSyncNonce((n) => n + 1);
+
+          if (!options.silent) {
+            addToast({
+              type: 'info',
+              titleEn: 'Cloud Cache Cleared & Synced',
+              titleBn: 'ক্যাশ রিফ্রেশ ও সিঙ্ক সম্পন্ন',
+              descriptionEn: 'Latest storefront, roles, and catalog loaded from server.',
+              descriptionBn: 'সার্ভার থেকে সর্বশেষ স্টোর, রোল ও ক্যাটালগ তথ্য আপডেট করা হয়েছে।',
+            });
+          }
+        } catch (err) {
+          console.warn('[AppContext] forceSyncAllState notice:', err);
+        } finally {
+          setIsSyncingState(false);
+          inFlightForceSyncRef.current = null;
+        }
+      })();
+
+      inFlightForceSyncRef.current = task;
+      return task;
+    },
+    [refreshAdminStatus, addToast]
+  );
+
+  // Automatic stale-snapshot recovery when mobile/desktop browser reconnects or resumes after >60s idle
+  useEffect(() => {
+    let hiddenAt = 0;
+
+    const handleOnline = () => {
+      void forceSyncAllState({ silent: true });
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+        return;
+      }
+      if (document.visibilityState === 'visible') {
+        const awayMs = hiddenAt ? Date.now() - hiddenAt : 0;
+        const sinceLastSyncMs = Date.now() - lastSyncTimestampRef.current;
+        if (awayMs > 60_000 && sinceLastSyncMs > 90_000) {
+          void forceSyncAllState({ silent: true });
+        }
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [forceSyncAllState]);
 
   const updateReturnPolicy = async (newPolicy: ReturnPolicyConfig) => {
     try {
@@ -857,6 +967,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateReturnPolicy,
         isReturnPolicyModalOpen,
         setIsReturnPolicyModalOpen,
+        isSyncingState,
+        forceSyncAllState,
       }}
     >
       {children}

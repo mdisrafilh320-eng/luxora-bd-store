@@ -73,19 +73,40 @@ export const QUICK_SUGGESTIONS: QuickSuggestion[] = [
   }
 ];
 
+export function getOrCreateWebChatSessionId(): string {
+  try {
+    const key = 'luxora_webchat_session_id';
+    const existing = localStorage.getItem(key);
+    if (existing) return existing;
+    const fresh = `web-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    localStorage.setItem(key, fresh);
+    return fresh;
+  } catch {
+    return `web-${Date.now().toString(36)}`;
+  }
+}
+
 /**
- * Send user query to the server-side Gemini AI proxy
+ * Send user query to the server-side Gemini AI proxy & optionally bridge into Omnichannel Inbox
  */
 export async function sendChatMessageToAI(
   message: string,
   history: ChatMessage[],
-  language: Language
+  language: Language,
+  visitorContext?: {
+    sessionId?: string;
+    visitorName?: string;
+    visitorPhone?: string;
+    syncToInbox?: boolean;
+  }
 ): Promise<string> {
   try {
     const formattedHistory = history.map((msg) => ({
       role: msg.sender === 'user' ? 'user' : 'model',
       content: msg.text,
     }));
+
+    const sessionId = visitorContext?.sessionId || getOrCreateWebChatSessionId();
 
     const response = await fetch('/api/ai/chat', {
       method: 'POST',
@@ -96,6 +117,10 @@ export async function sendChatMessageToAI(
         message,
         history: formattedHistory,
         language,
+        sessionId,
+        visitorName: visitorContext?.visitorName,
+        visitorPhone: visitorContext?.visitorPhone,
+        syncToInbox: visitorContext?.syncToInbox !== false,
       }),
     });
 

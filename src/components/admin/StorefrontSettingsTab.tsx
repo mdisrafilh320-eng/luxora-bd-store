@@ -63,6 +63,8 @@ export const StorefrontSettingsTab: React.FC = () => {
     isSuperAdmin,
     adminRole,
     addToast,
+    isSyncingState,
+    forceSyncAllState,
   } = useApp();
 
   const canEditCms = isSuperAdmin || adminRole === 'admin';
@@ -387,6 +389,16 @@ export const StorefrontSettingsTab: React.FC = () => {
               : 'All updates synchronize immediately with the live storefront carousel, category filter, footer, and product views.'}
           </p>
         </div>
+
+        <button
+          type="button"
+          onClick={() => void forceSyncAllState()}
+          disabled={isSyncingState}
+          className="px-3.5 py-2 rounded-xl bg-[#1A1D28] hover:bg-[#242838] border border-neutral-700 hover:border-[#D4AF37]/40 text-xs font-medium text-neutral-200 flex items-center gap-2 cursor-pointer disabled:opacity-50 shrink-0 transition-colors"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 text-[#D4AF37] ${isSyncingState ? 'animate-spin' : ''}`} />
+          <span>{language === 'bn' ? 'ক্লাউড সিঙ্ক করুন' : 'Sync Storefront'}</span>
+        </button>
       </div>
 
       {/* SECTION 1: HERO BANNER MANAGEMENT */}
@@ -417,7 +429,7 @@ export const StorefrontSettingsTab: React.FC = () => {
               </label>
 
               <div className="aspect-[16/9] rounded-xl border border-dashed border-neutral-700 bg-[#14161F] overflow-hidden flex flex-col items-center justify-center relative">
-                {bannerImageUrl ? (
+                {bannerImageUrl.trim() ? (
                   <img src={bannerImageUrl} alt="Banner Preview" className="w-full h-full object-cover" />
                 ) : (
                   <div className="text-center p-4 space-y-1 text-neutral-500">
@@ -579,7 +591,13 @@ export const StorefrontSettingsTab: React.FC = () => {
                   } ${isDeleting ? 'opacity-50 pointer-events-none' : ''}`}
                 >
                   <div className="relative aspect-[16/9] bg-black">
-                    <img src={b.imageUrl} alt={b.titleEn || `Banner ${idx + 1}`} className="w-full h-full object-cover" />
+                    {b.imageUrl?.trim() ? (
+                      <img src={b.imageUrl} alt={b.titleEn || `Banner ${idx + 1}`} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-neutral-600">
+                        <ImageIcon className="w-6 h-6" />
+                      </div>
+                    )}
                     <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/75 text-[10px] font-mono text-[#D4AF37]">
                       Slide #{idx + 1}
                     </span>

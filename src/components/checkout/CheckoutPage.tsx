@@ -1042,12 +1042,16 @@ export const CheckoutPage: React.FC = () => {
               {cart.map((item) => (
                 <div key={item.product.id + (item.selectedColor || '')} className="pt-3 first:pt-0 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <img
-                      src={item.product.image}
-                      alt={item.product.nameEn}
-                      referrerPolicy="no-referrer"
-                      className="w-12 h-12 object-cover rounded-xl bg-black border border-white/10 shrink-0"
-                    />
+                    {item.product.image?.trim() ? (
+                      <img
+                        src={item.product.image}
+                        alt={item.product.nameEn}
+                        referrerPolicy="no-referrer"
+                        className="w-12 h-12 object-cover rounded-xl bg-black border border-white/10 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-black border border-white/10 shrink-0" />
+                    )}
                     <div className="min-w-0 flex-1">
                       <h4 className="text-xs sm:text-sm font-semibold text-white truncate">
                         {language === 'bn' ? item.product.nameBn : item.product.nameEn}
@@ -1347,7 +1351,7 @@ export const CheckoutPage: React.FC = () => {
                 <label className="block text-xs font-semibold text-gray-400">
                   {language === 'bn' ? 'পেমেন্ট স্ক্রিনশট (ঐচ্ছিক)' : 'Payment Screenshot (Optional)'}
                 </label>
-                {screenshotPreview ? (
+                {screenshotPreview?.trim() ? (
                   <div className="p-2.5 rounded-xl bg-[#161620] border border-white/10 flex items-center justify-between">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <img src={screenshotPreview} alt="Receipt preview" className="w-10 h-10 object-cover rounded-lg shrink-0" />

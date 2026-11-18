@@ -17,6 +17,7 @@ import { CourierTrackingView } from './components/tracking/CourierTrackingView';
 import { CustomerSupportHub } from './components/support/CustomerSupportHub';
 import { AIAssistantWidget } from './components/support/AIAssistantWidget';
 import { ToastContainer } from './components/ui/ToastContainer';
+import { ErrorBoundary, lazyWithRetry } from './components/ui/ErrorBoundary';
 import { getProductById } from './services/productService';
 import {
   extractProductIdFromUrl,
@@ -24,10 +25,10 @@ import {
 } from './services/shareService';
 
 // Code-split admin and internal design-system bundles so regular shoppers never download admin dashboards/APIs
-const AdminAccessGate = lazy(() =>
+const AdminAccessGate = lazyWithRetry(() =>
   import('./components/admin/AdminAccessGate').then((mod) => ({ default: mod.AdminAccessGate }))
 );
-const DesignSystemExplorer = lazy(() =>
+const DesignSystemExplorer = lazyWithRetry(() =>
   import('./components/design-system/DesignSystemExplorer').then((mod) => ({
     default: mod.DesignSystemExplorer,
   }))
@@ -296,15 +297,21 @@ const MainStoreContent: React.FC = () => {
       return null;
     }
     return (
-      <Suspense
-        fallback={
-          <div className="min-h-screen bg-[#08090C] flex items-center justify-center text-xs text-neutral-400">
-            Loading Admin Workspace...
-          </div>
-        }
+      <ErrorBoundary
+        compact
+        fallbackTitle="Unable to Load Admin Panel"
+        onReset={() => setActiveView('store')}
       >
-        <AdminAccessGate />
-      </Suspense>
+        <Suspense
+          fallback={
+            <div className="min-h-screen bg-[#08090C] flex items-center justify-center text-xs text-neutral-400">
+              Loading Admin Workspace...
+            </div>
+          }
+        >
+          <AdminAccessGate />
+        </Suspense>
+      </ErrorBoundary>
     );
   }
 
@@ -313,15 +320,17 @@ const MainStoreContent: React.FC = () => {
       return null;
     }
     return (
-      <Suspense
-        fallback={
-          <div className="min-h-screen bg-[#08090C] flex items-center justify-center text-xs text-neutral-400">
-            Loading Design Tokens...
-          </div>
-        }
-      >
-        <DesignSystemExplorer />
-      </Suspense>
+      <ErrorBoundary compact fallbackTitle="Unable to Load Design Explorer">
+        <Suspense
+          fallback={
+            <div className="min-h-screen bg-[#08090C] flex items-center justify-center text-xs text-neutral-400">
+              Loading Design Tokens...
+            </div>
+          }
+        >
+          <DesignSystemExplorer />
+        </Suspense>
+      </ErrorBoundary>
     );
   }
 
@@ -357,31 +366,33 @@ const MainStoreContent: React.FC = () => {
 
 export default function App() {
   return (
-    <AppProvider>
-      <div className="min-h-screen max-w-full overflow-x-clip bg-[#0A0A0C] text-[#F3F4F6] flex flex-col font-sans selection:bg-[#D4AF37] selection:text-black relative">
-        {/* Navigation Header */}
-        <Header />
+    <ErrorBoundary fallbackTitle="Luxora Store Recovery">
+      <AppProvider>
+        <div className="min-h-screen max-w-full overflow-x-clip bg-[#0A0A0C] text-[#F3F4F6] flex flex-col font-sans selection:bg-[#D4AF37] selection:text-black relative">
+          {/* Navigation Header */}
+          <Header />
 
-        {/* Dynamic Main Body Content */}
-        <MainStoreContent />
+          {/* Dynamic Main Body Content */}
+          <MainStoreContent />
 
-        {/* Global Modals & Drawers */}
-        <CartDrawer />
-        <WishlistDrawer />
-        <ProductDetailModal />
-        <ReturnPolicyModal />
-        <AuthModal />
-        <ToastContainer />
+          {/* Global Modals & Drawers */}
+          <CartDrawer />
+          <WishlistDrawer />
+          <ProductDetailModal />
+          <ReturnPolicyModal />
+          <AuthModal />
+          <ToastContainer />
 
-        {/* AI Customer Support Concierge Floating Widget */}
-        <AIAssistantWidget />
+          {/* AI Customer Support Concierge Floating Widget */}
+          <AIAssistantWidget />
 
-        {/* Mobile Sticky Bottom Navigation */}
-        <BottomNav />
+          {/* Mobile Sticky Bottom Navigation */}
+          <BottomNav />
 
-        {/* Editorial Footer */}
-        <Footer />
-      </div>
-    </AppProvider>
+          {/* Editorial Footer */}
+          <Footer />
+        </div>
+      </AppProvider>
+    </ErrorBoundary>
   );
 }

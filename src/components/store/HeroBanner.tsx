@@ -229,7 +229,7 @@ export const HeroBanner: React.FC = () => {
             transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
             className="absolute inset-0"
           >
-            {!imageErrorMap[currentIndex] && (
+            {!imageErrorMap[currentIndex] && currentSlide.imageUrl?.trim() ? (
               <img
                 src={currentSlide.imageUrl}
                 alt={title || 'Luxora BD Featured Collection'}
@@ -238,7 +238,7 @@ export const HeroBanner: React.FC = () => {
                 onError={() => setImageErrorMap((prev) => ({ ...prev, [currentIndex]: true }))}
                 className="w-full h-full object-cover object-center"
               />
-            )}
+            ) : null}
             {/* Contrast Scrims */}
             <div className="absolute inset-0 bg-gradient-to-r from-[#09090B]/92 via-[#09090B]/65 to-transparent" />
             <div className="absolute inset-0 bg-gradient-to-t from-[#09090B]/80 via-transparent to-transparent" />

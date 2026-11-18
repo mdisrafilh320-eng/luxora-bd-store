@@ -109,7 +109,9 @@ export const ProductQuickViewModal: React.FC = () => {
                             : 'border-[#22222E] opacity-60 hover:opacity-100'
                         }`}
                       >
-                        <img src={img} alt="Thumbnail" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                        {img?.trim() ? (
+                          <img src={img} alt="Thumbnail" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                        ) : null}
                       </button>
                     ))}
                   </div>

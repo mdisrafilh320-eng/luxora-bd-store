@@ -3,7 +3,9 @@ import {
   getAuth, 
   GoogleAuthProvider, 
   setPersistence, 
-  browserLocalPersistence 
+  browserLocalPersistence,
+  browserSessionPersistence,
+  inMemoryPersistence
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -38,11 +40,23 @@ export const firebaseConfig = resolvedFirebaseConfig;
 // Initialize Firebase App singleton
 const app = !getApps().length ? initializeApp(resolvedFirebaseConfig) : getApp();
 
-// Initialize Auth
+// Initialize Auth with graceful fallback for Safari ITP / Private mode / restricted WebViews
 export const auth = getAuth(app);
-setPersistence(auth, browserLocalPersistence).catch((err) => {
-  console.warn('Firebase auth persistence warning:', err);
-});
+(async () => {
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+  } catch {
+    try {
+      await setPersistence(auth, browserSessionPersistence);
+    } catch {
+      try {
+        await setPersistence(auth, inMemoryPersistence);
+      } catch (err) {
+        console.warn('Firebase auth persistence fallback warning:', err);
+      }
+    }
+  }
+})();
 
 // Configure Google OAuth Provider
 export const googleProvider = new GoogleAuthProvider();
@@ -85,6 +99,20 @@ export interface FirestoreErrorInfo {
   };
 }
 
+export function isFirestoreQuotaOrOfflineError(error: unknown): boolean {
+  const err = error as { code?: string; message?: string };
+  const code = String(err?.code || '').toLowerCase();
+  const message = String(err?.message || '').toLowerCase();
+  return (
+    code.includes('resource-exhausted') ||
+    code.includes('unavailable') ||
+    message.includes('quota') ||
+    message.includes('resource-exhausted') ||
+    message.includes('client is offline') ||
+    message.includes('network')
+  );
+}
+
 /**
  * Robust, traceable error handling conforming to Firebase Security rules guidelines
  */
@@ -112,16 +140,23 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 /**
  * Validate Firestore cloud availability on application boot
- * without triggering unauthorized reads against restricted paths.
+ * against publicly readable settings/return_policy doc without triggering unauthorized reads.
  */
 export async function validateFirestoreConnection(): Promise<boolean> {
   try {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       return false;
     }
+    const probe = getDocFromServer(doc(db, 'settings', 'return_policy'));
+    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000));
+    await Promise.race([probe, timeout]);
     return Boolean(db);
-  } catch {
-    return false;
+  } catch (error) {
+    if (isFirestoreQuotaOrOfflineError(error)) {
+      console.warn('Firestore server probe offline/quota notice:', error);
+      return false;
+    }
+    return Boolean(db);
   }
 }
 

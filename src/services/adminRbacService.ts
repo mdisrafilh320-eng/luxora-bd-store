@@ -12,6 +12,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
   setDoc,
   updateDoc,
@@ -57,7 +58,7 @@ export function normalizeAdminRole(rawRole?: unknown, email?: string | null): Ad
   if (isSuperAdminEmail(email)) return 'super_admin';
   const r = String(rawRole || '').toLowerCase().trim();
   if (r === 'super_admin') return 'super_admin';
-  if (r === 'admin' || r === 'supervisor') return 'admin';
+  if (r === 'admin' || r === 'store_admin' || r === 'supervisor') return 'admin';
   return 'staff';
 }
 
@@ -89,9 +90,27 @@ function mapFirestoreAdminDoc(id: string, data: any): AuthorizedAdmin {
   };
 }
 
+function isValidFirestoreDocId(id: string): boolean {
+  return Boolean(id) && id.length <= 128 && /^[a-zA-Z0-9_.@-]+$/.test(id);
+}
+
+async function readDocPreferServer(ref: ReturnType<typeof doc>, forceServer: boolean) {
+  if (!forceServer) return getDoc(ref);
+  try {
+    return await getDocFromServer(ref);
+  } catch {
+    return await getDoc(ref);
+  }
+}
+
 export const adminRbacService = {
-  async verifyAdminAccess(email?: string | null, uid?: string | null): Promise<AdminAccessStatus> {
+  async verifyAdminAccess(
+    email?: string | null,
+    uid?: string | null,
+    options: { forceServer?: boolean } = {}
+  ): Promise<AdminAccessStatus> {
     const cleanEmail = normalizeEmail(email);
+    const forceServer = Boolean(options.forceServer);
 
     if (cleanEmail === PRIMARY_SUPER_ADMIN_EMAIL) {
       this.ensureSuperAdminDocument(cleanEmail, uid).catch(() => {});
@@ -112,8 +131,8 @@ export const adminRbacService = {
     }
 
     try {
-      if (cleanEmail) {
-        const emailSnap = await getDoc(doc(db, 'admins', cleanEmail));
+      if (cleanEmail && isValidFirestoreDocId(cleanEmail)) {
+        const emailSnap = await readDocPreferServer(doc(db, 'admins', cleanEmail), forceServer);
         if (emailSnap.exists()) {
           const entry = mapFirestoreAdminDoc(emailSnap.id, emailSnap.data());
           if (!entry.active) {
@@ -128,8 +147,8 @@ export const adminRbacService = {
         }
       }
 
-      if (uid) {
-        const uidSnap = await getDoc(doc(db, 'admins', uid));
+      if (uid && isValidFirestoreDocId(uid)) {
+        const uidSnap = await readDocPreferServer(doc(db, 'admins', uid), forceServer);
         if (uidSnap.exists()) {
           const entry = mapFirestoreAdminDoc(uidSnap.id, uidSnap.data());
           if (!entry.active) {
@@ -149,6 +168,129 @@ export const adminRbacService = {
       console.warn('Failed to verify admin status against Firestore:', error);
       return { isAdmin: false, isSuperAdmin: false, role: 'none' };
     }
+  },
+
+  /**
+   * Real-time per-user admin role listener.
+   * Ensures role promotions, suspensions, and revocations propagate immediately
+   * across every open browser/device without requiring manual reload or logout.
+   */
+  subscribeToUserAdminAccess(
+    email: string | null | undefined,
+    uid: string | null | undefined,
+    onUpdate: (status: AdminAccessStatus) => void
+  ): () => void {
+    const cleanEmail = normalizeEmail(email);
+    const cleanUid = (uid || '').trim();
+
+    if (cleanEmail === PRIMARY_SUPER_ADMIN_EMAIL) {
+      this.ensureSuperAdminDocument(cleanEmail, cleanUid).catch(() => {});
+      onUpdate({
+        isAdmin: true,
+        isSuperAdmin: true,
+        role: 'super_admin',
+        adminInfo: DEFAULT_SUPER_ADMIN,
+      });
+      return () => {};
+    }
+
+    if (!cleanEmail && !cleanUid) {
+      onUpdate({ isAdmin: false, isSuperAdmin: false, role: 'none' });
+      return () => {};
+    }
+
+    const unsubs: Array<() => void> = [];
+    let emailStatus: AdminAccessStatus | null = null;
+    let uidStatus: AdminAccessStatus | null = null;
+
+    const emitResolved = () => {
+      if (emailStatus && emailStatus.isAdmin) {
+        onUpdate(emailStatus);
+        return;
+      }
+      if (uidStatus && uidStatus.isAdmin) {
+        onUpdate(uidStatus);
+        return;
+      }
+      if (emailStatus !== null || uidStatus !== null) {
+        onUpdate({ isAdmin: false, isSuperAdmin: false, role: 'none' });
+      }
+    };
+
+    if (cleanEmail && isValidFirestoreDocId(cleanEmail)) {
+      try {
+        const unsubEmail = onSnapshot(
+          doc(db, 'admins', cleanEmail),
+          (snap) => {
+            if (snap.exists()) {
+              const entry = mapFirestoreAdminDoc(snap.id, snap.data());
+              emailStatus = entry.active
+                ? {
+                    isAdmin: true,
+                    isSuperAdmin: entry.role === 'super_admin',
+                    role: entry.role,
+                    adminInfo: entry,
+                  }
+                : { isAdmin: false, isSuperAdmin: false, role: 'none' };
+            } else {
+              emailStatus = { isAdmin: false, isSuperAdmin: false, role: 'none' };
+            }
+            emitResolved();
+          },
+          (err) => {
+            console.warn('[RBAC] Email admin listener warning:', err);
+            emailStatus = { isAdmin: false, isSuperAdmin: false, role: 'none' };
+            emitResolved();
+          }
+        );
+        unsubs.push(unsubEmail);
+      } catch {
+        emailStatus = { isAdmin: false, isSuperAdmin: false, role: 'none' };
+      }
+    } else {
+      emailStatus = { isAdmin: false, isSuperAdmin: false, role: 'none' };
+    }
+
+    if (cleanUid && isValidFirestoreDocId(cleanUid) && cleanUid !== cleanEmail) {
+      try {
+        const unsubUid = onSnapshot(
+          doc(db, 'admins', cleanUid),
+          (snap) => {
+            if (snap.exists()) {
+              const entry = mapFirestoreAdminDoc(snap.id, snap.data());
+              uidStatus = entry.active
+                ? {
+                    isAdmin: true,
+                    isSuperAdmin: entry.role === 'super_admin',
+                    role: entry.role,
+                    adminInfo: entry,
+                  }
+                : { isAdmin: false, isSuperAdmin: false, role: 'none' };
+            } else {
+              uidStatus = { isAdmin: false, isSuperAdmin: false, role: 'none' };
+            }
+            emitResolved();
+          },
+          () => {
+            uidStatus = { isAdmin: false, isSuperAdmin: false, role: 'none' };
+            emitResolved();
+          }
+        );
+        unsubs.push(unsubUid);
+      } catch {
+        uidStatus = { isAdmin: false, isSuperAdmin: false, role: 'none' };
+      }
+    } else {
+      uidStatus = { isAdmin: false, isSuperAdmin: false, role: 'none' };
+    }
+
+    return () => {
+      unsubs.forEach((u) => {
+        try {
+          u();
+        } catch {}
+      });
+    };
   },
 
   async ensureSuperAdminDocument(email: string, uid?: string | null): Promise<void> {

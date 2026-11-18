@@ -12,11 +12,12 @@ import {
   Unsubscribe
 } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { safeGetJSON, safeRemoveItem, safeSetJSON, STORAGE_KEYS } from '../utils/storage';
 import { Order, OrderStatus, CourierTracking } from '../types';
 
 const ORDERS_COLLECTION = 'orders';
 
-const LOCAL_ORDERS_CACHE_KEY = 'luxora_cached_orders';
+const LOCAL_ORDERS_CACHE_KEY = STORAGE_KEYS.CACHED_ORDERS;
 
 /**
  * Deep sanitization helper that strips all `undefined` fields recursively
@@ -42,33 +43,28 @@ function sanitizeForFirestore<T>(val: T): T {
 }
 
 /**
- * Read cached orders from local storage (safe fallback)
+ * Clear local orders cache on sign-out or session switch
  */
-export function getLocalCachedOrders(): Order[] {
-  try {
-    const saved = localStorage.getItem(LOCAL_ORDERS_CACHE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch (e) {
-    console.warn('Failed to parse cached orders:', e);
-  }
-  return [];
+export function clearLocalOrdersCache(): void {
+  safeRemoveItem(LOCAL_ORDERS_CACHE_KEY);
 }
 
 /**
- * Save order to local cache for instant UI rendering and offline resilience
+ * Read cached orders from safe local storage (fallback)
+ */
+export function getLocalCachedOrders(): Order[] {
+  const parsed = safeGetJSON<Order[]>(LOCAL_ORDERS_CACHE_KEY, []);
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+/**
+ * Save order to local cache for instant UI rendering and offline resilience (capped to 20 items)
  */
 export function saveOrderToLocalCache(order: Order): void {
-  try {
-    const current = getLocalCachedOrders();
-    const filtered = current.filter((o) => o.id !== order.id);
-    const updated = [order, ...filtered];
-    localStorage.setItem(LOCAL_ORDERS_CACHE_KEY, JSON.stringify(updated));
-  } catch (e) {
-    console.warn('Failed to save order to local cache:', e);
-  }
+  const current = getLocalCachedOrders();
+  const filtered = current.filter((o) => o.id !== order.id);
+  const updated = [order, ...filtered].slice(0, 20);
+  safeSetJSON(LOCAL_ORDERS_CACHE_KEY, updated, 500_000);
 }
 
 /**

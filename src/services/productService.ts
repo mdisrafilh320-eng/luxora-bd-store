@@ -1,6 +1,7 @@
 import { 
   collection, 
   getDocs, 
+  getDocsFromServer,
   getDoc, 
   doc, 
   setDoc, 
@@ -12,11 +13,12 @@ import {
   Unsubscribe 
 } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
+import { safeGetJSON, safeRemoveItem, safeSetJSON, STORAGE_KEYS } from '../utils/storage';
 import { Product, ProductCategory, ProductSpec } from '../types';
 import { mockProducts } from '../data/mockProducts';
 
 export const PRODUCTS_COLLECTION = 'products';
-const CACHED_PRODUCTS_STORAGE_KEY = 'luxora_cached_products';
+const CACHED_PRODUCTS_STORAGE_KEY = STORAGE_KEYS.CACHED_PRODUCTS;
 
 // Per-visit in-memory random rank map: generates a fresh order on every page load/refresh
 // while keeping positions stable during in-page filtering, searching, and modal interactions.
@@ -234,32 +236,45 @@ export function sanitizeProductData(
   return cleanProduct;
 }
 
+export function clearProductCache(): void {
+  safeRemoveItem(CACHED_PRODUCTS_STORAGE_KEY);
+}
+
 /**
- * Retrieve local cached catalog from localStorage
+ * Retrieve local cached catalog from safe storage
  */
 export function getLocalCachedProducts(): Product[] {
-  try {
-    const raw = localStorage.getItem(CACHED_PRODUCTS_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-    }
-  } catch {
-    // fallback
+  const parsed = safeGetJSON<Product[] | null>(CACHED_PRODUCTS_STORAGE_KEY, null);
+  if (Array.isArray(parsed)) {
+    return parsed;
   }
   return mockProducts;
 }
 
 /**
- * Persist products catalog to local storage cache
+ * Persist products catalog to local storage cache with size guard
  */
 export function setLocalCachedProducts(products: Product[]): void {
-  try {
-    localStorage.setItem(CACHED_PRODUCTS_STORAGE_KEY, JSON.stringify(products));
-  } catch {
-    // ignore
+  if (!Array.isArray(products)) return;
+  if (products.length === 0) {
+    safeSetJSON(CACHED_PRODUCTS_STORAGE_KEY, []);
+    return;
+  }
+
+  // Strip oversized inline data URLs inside secondary galleries if catalog is heavy
+  const serializedOk = safeSetJSON(CACHED_PRODUCTS_STORAGE_KEY, products, 750_000);
+  if (!serializedOk) {
+    const lightweight = products.map((p) => ({
+      ...p,
+      gallery: Array.isArray(p.gallery)
+        ? p.gallery.filter((u) => typeof u === 'string' && !u.startsWith('data:'))
+        : [],
+      image:
+        typeof p.image === 'string' && p.image.startsWith('data:') && p.image.length > 60_000
+          ? ''
+          : p.image,
+    }));
+    safeSetJSON(CACHED_PRODUCTS_STORAGE_KEY, lightweight, 750_000);
   }
 }
 
@@ -327,16 +342,27 @@ export function subscribeToProducts(
 /**
  * Fetch all available products from Firestore catalog
  */
-export async function getProducts(): Promise<Product[]> {
+export async function getProducts(forceServer = false): Promise<Product[]> {
   try {
     const colRef = collection(db, PRODUCTS_COLLECTION);
-    const snap = await getDocs(colRef);
+    let snap;
+    if (forceServer) {
+      try {
+        snap = await getDocsFromServer(colRef);
+      } catch {
+        snap = await getDocs(colRef);
+      }
+    } else {
+      snap = await getDocs(colRef);
+    }
     
     if (snap.empty) {
       // Check alias collection 'luxora-products'
       try {
         const altRef = collection(db, 'luxora-products');
-        const altSnap = await getDocs(altRef);
+        const altSnap = forceServer
+          ? await getDocsFromServer(altRef).catch(() => getDocs(altRef))
+          : await getDocs(altRef);
         if (!altSnap.empty) {
           const altItems: Product[] = [];
           altSnap.forEach((docSnap) => {

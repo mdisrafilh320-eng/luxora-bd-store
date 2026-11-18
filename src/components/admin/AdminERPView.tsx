@@ -40,7 +40,8 @@ import {
   ListChecks,
   Loader2,
   Bot,
-  Webhook
+  Webhook,
+  FileSpreadsheet
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Order, Product, OrderStatus, PaymentStatus, ProductCategory, ProductSpec } from '../../types';
@@ -61,6 +62,12 @@ import { StorefrontSettingsTab } from './StorefrontSettingsTab';
 import { OmnichannelSalesInboxTab } from './OmnichannelSalesInboxTab';
 import { OmnichannelSettingsTab } from './OmnichannelSettingsTab';
 import { ProductImageUploader } from './ProductImageUploader';
+import { PrintableInvoiceModal } from './PrintableInvoiceModal';
+import {
+  bookCourierParcel,
+  downloadOrdersCsvForGoogleSheets,
+  syncOrdersToGoogleSheets,
+} from '../../services/omnichannelCrmService';
 import { PRIMARY_SUPER_ADMIN_EMAIL } from '../../services/adminRbacService';
 
 type AdminTab = 'overview' | 'ai_sales_inbox' | 'omnichannel_settings' | 'orders' | 'inventory' | 'storefront_cms' | 'finance' | 'payment_settings' | 'team_rbac' | 'security';
@@ -72,6 +79,7 @@ export const AdminERPView: React.FC = () => {
     products,
     categories,
     refreshProducts,
+    forceSyncAllState,
     addProductToState,
     removeProductFromState,
     addToast, 
@@ -99,9 +107,13 @@ export const AdminERPView: React.FC = () => {
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('all');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>('all');
+  const [orderSourceFilter, setOrderSourceFilter] = useState<string>('all');
 
   // Modal States
   const [selectedOrderForVerification, setSelectedOrderForVerification] = useState<Order | null>(null);
+  const [invoiceModalOrder, setInvoiceModalOrder] = useState<Order | null>(null);
+  const [bookingOrderId, setBookingOrderId] = useState<string | null>(null);
+  const [isSyncingSheets, setIsSyncingSheets] = useState(false);
   const [trackingModalOrder, setTrackingModalOrder] = useState<Order | null>(null);
   const [trackingInput, setTrackingInput] = useState({
     courier: 'Steadfast Luxury Express',
@@ -178,18 +190,21 @@ export const AdminERPView: React.FC = () => {
 
   const handleRefreshAll = async () => {
     setIsRefreshing(true);
-    await Promise.all([
-      fetchAllOrders(),
-      refreshProducts(),
-    ]);
-    setIsRefreshing(false);
-    addToast({
-      type: 'info',
-      titleEn: 'Workspace Synchronized',
-      titleBn: 'ডাটা সিঙ্ক সম্পন্ন হয়েছে',
-      descriptionEn: 'Latest orders, stock levels, and inventory updated',
-      descriptionBn: 'সর্বশেষ অর্ডার ও ইনভেন্টরি তথ্য আপডেট হয়েছে',
-    });
+    try {
+      await Promise.all([
+        fetchAllOrders(),
+        forceSyncAllState({ silent: true }),
+      ]);
+      addToast({
+        type: 'info',
+        titleEn: 'Workspace Synchronized',
+        titleBn: 'ডাটা সিঙ্ক সম্পন্ন হয়েছে',
+        descriptionEn: 'Cleared stale cache and loaded latest orders, banners, roles, and inventory',
+        descriptionBn: 'ক্যাশ পরিষ্কার করে সর্বশেষ অর্ডার, ব্যানার, রোল ও ইনভেন্টরি আপডেট হয়েছে',
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   // Executive Metrics
@@ -215,10 +230,12 @@ export const AdminERPView: React.FC = () => {
 
       const matchesStatus = orderStatusFilter === 'all' || order.orderStatus === orderStatusFilter;
       const matchesPayment = paymentStatusFilter === 'all' || order.paymentStatus === paymentStatusFilter;
+      const src = order.sourceChannel || 'luxora_web';
+      const matchesSource = orderSourceFilter === 'all' || src === orderSourceFilter;
 
-      return matchesSearch && matchesStatus && matchesPayment;
+      return matchesSearch && matchesStatus && matchesPayment && matchesSource;
     });
-  }, [orders, orderSearchQuery, orderStatusFilter, paymentStatusFilter]);
+  }, [orders, orderSearchQuery, orderStatusFilter, paymentStatusFilter, orderSourceFilter]);
 
   // Filtered Products for Inventory (sorted most-recently updated first for admin convenience)
   const filteredProducts = useMemo(() => {
@@ -330,6 +347,77 @@ export const AdminERPView: React.FC = () => {
       });
     } catch (err) {
       console.error('Tracking assignment error:', err);
+    }
+  };
+
+  // One-Click Parcel Booking for Steadfast & Pathao
+  const handleOneClickBookCourier = async (order: Order, provider: 'steadfast' | 'pathao') => {
+    setBookingOrderId(order.id);
+    try {
+      const codAmount =
+        order.paymentStatus === 'paid'
+          ? 0
+          : Number(order.paymentDetails?.dueAmount ?? order.totalAmount);
+      const res = await bookCourierParcel({
+        orderId: order.id,
+        provider,
+        customer: order.customer,
+        totalAmount: order.totalAmount,
+        codAmount,
+        note: order.customer?.notes,
+      });
+      await orderService.updateOrderStatus(order.id, 'In Transit', res.trackingInfo);
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === order.id ? { ...o, orderStatus: 'In Transit', trackingInfo: res.trackingInfo } : o
+        )
+      );
+      addToast({
+        type: 'success',
+        titleEn: `${provider.toUpperCase()} Parcel Booked`,
+        titleBn: `${provider.toUpperCase()} পার্সেল বুক হয়েছে`,
+        descriptionEn: `${res.message} (CN: ${res.trackingInfo.consignmentId})`,
+      });
+    } catch (err: any) {
+      addToast({
+        type: 'error',
+        titleEn: 'Courier Booking Failed',
+        titleBn: 'কুরিয়ার বুকিং ব্যর্থ',
+        descriptionEn: err?.message || 'Could not book parcel.',
+      });
+    } finally {
+      setBookingOrderId(null);
+    }
+  };
+
+  const handleSyncOrdersSheets = async (csvOnly = false) => {
+    setIsSyncingSheets(true);
+    try {
+      if (csvOnly) {
+        downloadOrdersCsvForGoogleSheets(filteredOrders);
+        addToast({
+          type: 'success',
+          titleEn: `Exported ${filteredOrders.length} Orders CSV`,
+          titleBn: `${filteredOrders.length}টি অর্ডার CSV ডাউনলোড হয়েছে`,
+        });
+      } else {
+        const res = await syncOrdersToGoogleSheets(filteredOrders);
+        addToast({
+          type: 'success',
+          titleEn: res.pushedLive ? 'Orders Pushed to Google Sheets' : 'Sheets Payload Exported',
+          titleBn: 'গুগল শিট সিঙ্ক সম্পন্ন',
+          descriptionEn: res.message,
+        });
+      }
+    } catch (err: any) {
+      addToast({
+        type: 'error',
+        titleEn: 'Sheets Sync Error',
+        titleBn: 'গুগল শিট ত্রুটি',
+        descriptionEn: err?.message,
+      });
+    } finally {
+      setIsSyncingSheets(false);
     }
   };
 
@@ -1148,12 +1236,29 @@ export const AdminERPView: React.FC = () => {
                 />
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2.5">
+                {/* Source Channel Filter */}
+                <select
+                  value={orderSourceFilter}
+                  onChange={(e) => setOrderSourceFilter(e.target.value)}
+                  className="px-3 py-2.5 bg-[#161822] border border-neutral-800 rounded-xl text-xs text-neutral-300 focus:outline-none focus:border-[#D4AF37]"
+                >
+                  <option value="all">All Sources</option>
+                  <option value="luxora_web">Storefront</option>
+                  <option value="messenger">Messenger</option>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="instagram">Instagram</option>
+                  <option value="tiktok">TikTok</option>
+                  <option value="web">Web Live Chat</option>
+                  <option value="shopify">Shopify</option>
+                  <option value="woocommerce">WooCommerce</option>
+                </select>
+
                 {/* Status Filter */}
                 <select
                   value={orderStatusFilter}
                   onChange={(e) => setOrderStatusFilter(e.target.value)}
-                  className="px-3.5 py-2.5 bg-[#161822] border border-neutral-800 rounded-xl text-xs text-neutral-300 focus:outline-none focus:border-[#D4AF37]"
+                  className="px-3 py-2.5 bg-[#161822] border border-neutral-800 rounded-xl text-xs text-neutral-300 focus:outline-none focus:border-[#D4AF37]"
                 >
                   <option value="all">All Order Statuses</option>
                   <option value="Pending">Pending</option>
@@ -1168,7 +1273,7 @@ export const AdminERPView: React.FC = () => {
                 <select
                   value={paymentStatusFilter}
                   onChange={(e) => setPaymentStatusFilter(e.target.value)}
-                  className="px-3.5 py-2.5 bg-[#161822] border border-neutral-800 rounded-xl text-xs text-neutral-300 focus:outline-none focus:border-[#D4AF37]"
+                  className="px-3 py-2.5 bg-[#161822] border border-neutral-800 rounded-xl text-xs text-neutral-300 focus:outline-none focus:border-[#D4AF37]"
                 >
                   <option value="all">All Payment States</option>
                   <option value="pending">Pending Verification</option>
@@ -1176,6 +1281,28 @@ export const AdminERPView: React.FC = () => {
                   <option value="paid">Paid & Settled</option>
                   <option value="failed">Failed / Rejected</option>
                 </select>
+
+                {/* Google Sheets Push & CSV Export */}
+                <button
+                  type="button"
+                  disabled={isSyncingSheets}
+                  onClick={() => handleSyncOrdersSheets(false)}
+                  className="px-3 py-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                  title="Sync filtered orders to Google Sheets Webhook"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  <span>Push Sheets</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={isSyncingSheets}
+                  onClick={() => handleSyncOrdersSheets(true)}
+                  className="px-3 py-2.5 rounded-xl bg-[#1A1C24] hover:bg-[#232632] border border-neutral-700 text-neutral-200 text-xs font-medium flex items-center gap-1.5 cursor-pointer"
+                  title="Download CSV formatted for Google Sheets"
+                >
+                  <Download className="w-3.5 h-3.5 text-[#D4AF37]" />
+                  <span>CSV</span>
+                </button>
               </div>
             </div>
 
@@ -1221,8 +1348,11 @@ export const AdminERPView: React.FC = () => {
                         return (
                           <tr key={order.id} className="hover:bg-[#161822]/60 transition-colors">
                             <td className="py-4 px-4 font-mono font-semibold text-white">
-                              <div className="flex items-center gap-2">
+                              <div className="flex flex-wrap items-center gap-1.5">
                                 <span className="text-[#D4AF37]">{order.id}</span>
+                                <span className="px-1.5 py-0.5 rounded bg-[#1A1D26] border border-neutral-700 text-[9px] font-sans uppercase text-neutral-300">
+                                  {(order.sourceChannel || 'web').replace('luxora_web', 'store')}
+                                </span>
                               </div>
                               <span className="text-[10px] text-neutral-500 block font-sans font-normal mt-0.5">
                                 {order.createdAt ? new Date(order.createdAt).toLocaleString('en-GB') : 'Recent'}
@@ -1315,11 +1445,44 @@ export const AdminERPView: React.FC = () => {
                             </td>
 
                             <td className="py-4 px-4 text-right">
-                              <div className="flex items-center justify-end gap-2">
+                              <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                {/* Print Invoice Trigger */}
+                                <button
+                                  type="button"
+                                  onClick={() => setInvoiceModalOrder(order)}
+                                  className="p-1.5 rounded-lg bg-[#1A1C24] hover:bg-[#D4AF37]/20 border border-neutral-800 hover:border-[#D4AF37]/40 text-neutral-200 hover:text-[#D4AF37] transition-all cursor-pointer"
+                                  title="Print / Download Invoice"
+                                >
+                                  <Printer className="w-4 h-4" />
+                                </button>
+
+                                {/* 1-Click Book Steadfast */}
+                                <button
+                                  type="button"
+                                  disabled={bookingOrderId === order.id}
+                                  onClick={() => handleOneClickBookCourier(order, 'steadfast')}
+                                  className="px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                                  title="1-Click Book Steadfast Parcel"
+                                >
+                                  {bookingOrderId === order.id ? '...' : 'Steadfast'}
+                                </button>
+
+                                {/* 1-Click Book Pathao */}
+                                <button
+                                  type="button"
+                                  disabled={bookingOrderId === order.id}
+                                  onClick={() => handleOneClickBookCourier(order, 'pathao')}
+                                  className="px-2 py-1 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                                  title="1-Click Book Pathao Parcel"
+                                >
+                                  Pathao
+                                </button>
+
                                 {/* Verify Payment Trigger */}
                                 <button
+                                  type="button"
                                   onClick={() => setSelectedOrderForVerification(order)}
-                                  className="p-1.5 rounded-lg bg-[#1A1C24] hover:bg-[#D4AF37]/20 border border-neutral-800 hover:border-[#D4AF37]/40 text-neutral-200 hover:text-[#D4AF37] transition-all"
+                                  className="p-1.5 rounded-lg bg-[#1A1C24] hover:bg-[#D4AF37]/20 border border-neutral-800 hover:border-[#D4AF37]/40 text-neutral-200 hover:text-[#D4AF37] transition-all cursor-pointer"
                                   title="Inspect Payment Proof & Verify TrxID"
                                 >
                                   <Eye className="w-4 h-4" />
@@ -1327,6 +1490,7 @@ export const AdminERPView: React.FC = () => {
 
                                 {/* Assign Tracking Trigger */}
                                 <button
+                                  type="button"
                                   onClick={() => {
                                     setTrackingModalOrder(order);
                                     setTrackingInput({
@@ -1336,8 +1500,8 @@ export const AdminERPView: React.FC = () => {
                                       estimatedDelivery: order.trackingInfo?.estimatedDelivery || 'Tomorrow by 05:00 PM',
                                     });
                                   }}
-                                  className="p-1.5 rounded-lg bg-[#1A1C24] hover:bg-purple-500/20 border border-neutral-800 hover:border-purple-500/40 text-neutral-200 hover:text-purple-400 transition-all"
-                                  title="Assign Courier Tracking ID"
+                                  className="p-1.5 rounded-lg bg-[#1A1C24] hover:bg-purple-500/20 border border-neutral-800 hover:border-purple-500/40 text-neutral-200 hover:text-purple-400 transition-all cursor-pointer"
+                                  title="Manual Tracking Override"
                                 >
                                   <Truck className="w-4 h-4" />
                                 </button>
@@ -1426,12 +1590,18 @@ export const AdminERPView: React.FC = () => {
                     <div key={prod.id} className="p-5 rounded-2xl bg-[#12141A] border border-neutral-800/80 hover:border-[#D4AF37]/40 transition-all flex flex-col justify-between space-y-4 shadow-lg group">
                       <div className="flex items-start gap-4">
                         <div className="w-20 h-20 rounded-xl bg-[#161822] overflow-hidden flex-shrink-0 border border-neutral-800 relative">
-                          <img 
-                            src={prod.image} 
-                            alt={prod.nameEn}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                            referrerPolicy="no-referrer"
-                          />
+                          {prod.image?.trim() ? (
+                            <img 
+                              src={prod.image} 
+                              alt={prod.nameEn}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-neutral-600">
+                              <Package className="w-6 h-6" />
+                            </div>
+                          )}
                           {isLowStock && (
                             <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500 text-white">
                               LOW
@@ -1836,7 +2006,11 @@ export const AdminERPView: React.FC = () => {
                     {selectedOrderForVerification.items.map((item, idx) => (
                       <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-[#161822] border border-neutral-800/80">
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <img src={item.image} alt={item.nameEn} referrerPolicy="no-referrer" className="w-8 h-8 rounded object-cover border border-neutral-700 shrink-0" />
+                          {item.image?.trim() ? (
+                            <img src={item.image} alt={item.nameEn} referrerPolicy="no-referrer" className="w-8 h-8 rounded object-cover border border-neutral-700 shrink-0" />
+                          ) : (
+                            <div className="w-8 h-8 rounded bg-neutral-800 border border-neutral-700 shrink-0" />
+                          )}
                           <div className="truncate">
                             <span className="text-white font-medium truncate block">{item.nameEn}</span>
                             <span className="text-[10px] text-neutral-400 font-mono">
@@ -1870,7 +2044,7 @@ export const AdminERPView: React.FC = () => {
               </div>
 
               {/* Screenshot Proof Preview (if provided) */}
-              {selectedOrderForVerification.paymentDetails?.paymentProofUrl && (
+              {selectedOrderForVerification.paymentDetails?.paymentProofUrl?.trim() && (
                 <div className="space-y-2">
                   <span className="text-xs text-neutral-400 block">Uploaded MFS Receipt Screenshot:</span>
                   <div className="max-h-48 rounded-xl overflow-hidden border border-neutral-800 bg-[#0A0C10] flex items-center justify-center">
@@ -2468,6 +2642,14 @@ export const AdminERPView: React.FC = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* In-App Printable Invoice Modal */}
+        {invoiceModalOrder && (
+          <PrintableInvoiceModal
+            order={invoiceModalOrder}
+            onClose={() => setInvoiceModalOrder(null)}
+          />
         )}
 
       </div>

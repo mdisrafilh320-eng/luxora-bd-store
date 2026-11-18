@@ -487,11 +487,15 @@ export const CourierTrackingView: React.FC<CourierTrackingViewProps> = ({
                 <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
                   {currentOrder.items.map((item, idx) => (
                     <div key={idx} className="flex items-center gap-3 p-2.5 rounded-2xl bg-[#0E0E14] border border-[#1C1C26]">
-                      <img
-                        src={item.image}
-                        alt={item.nameEn}
-                        className="w-12 h-12 rounded-xl object-cover border border-[#262634] shrink-0"
-                      />
+                      {item.image?.trim() ? (
+                        <img
+                          src={item.image}
+                          alt={item.nameEn}
+                          className="w-12 h-12 rounded-xl object-cover border border-[#262634] shrink-0"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl bg-black border border-[#262634] shrink-0" />
+                      )}
                       <div className="flex-1 min-w-0">
                         <h5 className="text-xs font-bold text-white truncate">
                           {language === 'bn' ? item.nameBn : item.nameEn}

@@ -243,12 +243,16 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
                     className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-[#14141A] border border-[#22222E] text-xs print:bg-white print:border-gray-200"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <img
-                        src={item.image}
-                        alt={item.nameEn}
-                        referrerPolicy="no-referrer"
-                        className="w-10 h-10 object-cover rounded bg-black shrink-0 border border-white/10 print:border-gray-300"
-                      />
+                      {item.image?.trim() ? (
+                        <img
+                          src={item.image}
+                          alt={item.nameEn}
+                          referrerPolicy="no-referrer"
+                          className="w-10 h-10 object-cover rounded bg-black shrink-0 border border-white/10 print:border-gray-300"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded bg-black shrink-0 border border-white/10 print:border-gray-300" />
+                      )}
                       <div className="truncate">
                         <span className="font-semibold text-white truncate block print:text-black">
                           {language === 'bn' ? item.nameBn : item.nameEn}

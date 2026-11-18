@@ -107,6 +107,7 @@
             "estimatedDelivery": { "type": "string", "maxLength": 80 }
           }
         },
+        "sourceChannel": { "type": "string", "description": "Origin channel (luxora_web, messenger, whatsapp, instagram, tiktok, web, shopify, woocommerce)" },
         "createdAt": { "type": "string", "format": "date-time", "description": "Order creation timestamp" },
         "updatedAt": { "type": "string", "format": "date-time", "description": "Order updated timestamp" }
       },
@@ -169,17 +170,21 @@
     },
     "CrmConversation": {
       "title": "CrmConversation",
-      "description": "Admin-only omnichannel customer sales conversation from Messenger, WhatsApp, Instagram, or TikTok",
+      "description": "Admin-only omnichannel customer sales conversation from Messenger, WhatsApp, Instagram, TikTok, or Website Live Chat",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "channel": { "type": "string", "enum": ["messenger", "whatsapp", "instagram", "tiktok"] },
+        "channel": { "type": "string", "enum": ["messenger", "whatsapp", "instagram", "tiktok", "web"] },
+        "entryType": { "type": "string", "enum": ["dm", "comment", "voice_note", "web_chat", "system_event"] },
+        "aiMode": { "type": "string", "enum": ["auto_pilot", "review_mode", "human_takeover"] },
         "customerId": { "type": "string" },
         "customerName": { "type": "string", "maxLength": 120 },
         "lastMessage": { "type": "string", "maxLength": 2000 },
         "lastMessageAt": { "type": "string", "format": "date-time" },
         "unreadCount": { "type": "number" },
         "status": { "type": "string", "enum": ["open", "negotiating", "ready_to_order", "converted", "resolved"] },
+        "escalation": { "type": "object" },
+        "extractedOrderDraft": { "type": "object" },
         "messages": { "type": "array" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }

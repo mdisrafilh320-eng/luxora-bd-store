@@ -146,12 +146,14 @@ export const CategoryGrid: React.FC = () => {
             >
               {/* Background ambient image with overlay */}
               <div className="h-44 w-full relative overflow-hidden bg-[#0D0D12]">
-                <img
-                  src={cat.image}
-                  alt={cat.nameEn}
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover object-center group-hover:scale-108 transition-transform duration-700 opacity-40 group-hover:opacity-60"
-                />
+                {cat.image?.trim() ? (
+                  <img
+                    src={cat.image}
+                    alt={cat.nameEn}
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover object-center group-hover:scale-108 transition-transform duration-700 opacity-40 group-hover:opacity-60"
+                  />
+                ) : null}
                 <div className="absolute inset-0 bg-gradient-to-t from-[#121218] via-[#121218]/80 to-transparent" />
                 
                 {/* Top Badge Strip */}

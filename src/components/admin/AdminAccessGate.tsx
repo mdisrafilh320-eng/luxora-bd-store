@@ -1,8 +1,9 @@
-import React, { Suspense, lazy, useEffect, useRef } from 'react';
+import React, { Suspense, useEffect, useRef } from 'react';
 import { Lock } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { ErrorBoundary, lazyWithRetry } from '../ui/ErrorBoundary';
 
-const LazyAdminERPView = lazy(() =>
+const LazyAdminERPView = lazyWithRetry(() =>
   import('./AdminERPView').then((mod) => ({ default: mod.AdminERPView }))
 );
 
@@ -71,14 +72,20 @@ export const AdminAccessGate: React.FC = () => {
   }
 
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-[#08090C] flex items-center justify-center p-6 text-xs text-neutral-400">
-          {language === 'bn' ? 'অ্যাডমিন ড্যাশবোর্ড লোড হচ্ছে...' : 'Loading Admin Workspace...'}
-        </div>
-      }
+    <ErrorBoundary
+      compact
+      fallbackTitle="Admin Workspace Error"
+      onReset={() => setActiveView('store')}
     >
-      <LazyAdminERPView />
-    </Suspense>
+      <Suspense
+        fallback={
+          <div className="min-h-screen bg-[#08090C] flex items-center justify-center p-6 text-xs text-neutral-400">
+            {language === 'bn' ? 'অ্যাডমিন ড্যাশবোর্ড লোড হচ্ছে...' : 'Loading Admin Workspace...'}
+          </div>
+        }
+      >
+        <LazyAdminERPView />
+      </Suspense>
+    </ErrorBoundary>
   );
 };

@@ -136,14 +136,20 @@ service cloud.firestore {
       allow create, update, delete: if isValidId(adminId) && isSuperAdmin();
     }
 
-    // --- SETTINGS COLLECTION (Public Storefront Read; Storefront Meta & Return Policy Manager+; Payment Super Admin Only) ---
+    // --- SETTINGS COLLECTION (Public Storefront Read; Storefront Meta & Return Policy Manager+; AI/Logistics Admin+; Payment Super Admin Only) ---
     match /settings/{settingId} {
-      allow get: if isValidId(settingId);
+      allow get: if isValidId(settingId) && (
+        (settingId == 'logistics_sheets' || settingId == 'ai_training')
+          ? isAdmin()
+          : true
+      );
       allow list: if isAdmin();
       allow create, update, delete: if isValidId(settingId) && (
         (settingId == 'storefront_meta' || settingId == 'return_policy')
           ? isManagerOrSuperAdmin()
-          : isSuperAdmin()
+          : (settingId == 'ai_training' || settingId == 'logistics_sheets')
+            ? isAdmin()
+            : isSuperAdmin()
       );
     }
 

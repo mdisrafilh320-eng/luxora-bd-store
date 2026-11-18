@@ -237,7 +237,11 @@ export const AccountView: React.FC = () => {
                     {order.items.map((item, idx) => (
                       <div key={idx} className="flex items-center justify-between gap-4 text-xs">
                         <div className="flex items-center gap-3">
-                          <img src={item.image} alt={item.nameEn} referrerPolicy="no-referrer" className="w-10 h-10 rounded-lg object-cover" />
+                          {item.image?.trim() ? (
+                            <img src={item.image} alt={item.nameEn} referrerPolicy="no-referrer" className="w-10 h-10 rounded-lg object-cover" />
+                          ) : (
+                            <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/10 shrink-0" />
+                          )}
                           <div>
                             <span className="font-semibold text-white block">{language === 'bn' ? item.nameBn : item.nameEn}</span>
                             <span className="text-[11px] text-gray-400">Qty: {item.quantity} {item.selectedColor ? `• ${item.selectedColor}` : ''}</span>

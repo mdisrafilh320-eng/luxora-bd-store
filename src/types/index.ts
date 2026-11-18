@@ -202,6 +202,8 @@ export interface CourierTracking {
   trackingUrl?: string;
   estimatedDelivery?: string;
   lastLocation?: string;
+  bookedAt?: string;
+  bookingStatus?: 'live_api' | 'sandbox_booked' | 'manual';
 }
 
 export interface OrderCustomer {
@@ -215,9 +217,21 @@ export interface OrderCustomer {
   notes?: string;
 }
 
+export type OrderSourceChannel =
+  | 'luxora_web'
+  | 'web'
+  | 'messenger'
+  | 'whatsapp'
+  | 'instagram'
+  | 'tiktok'
+  | 'shopify'
+  | 'woocommerce';
+
 export interface Order {
   id: string; // e.g. "LUX-849201"
   userId: string;
+  sourceChannel?: OrderSourceChannel;
+  externalOrderId?: string;
   customer: OrderCustomer;
   items: OrderItem[];
   subtotal: number;
@@ -254,7 +268,56 @@ export interface ToastMessage {
   descriptionBn?: string;
 }
 
-export type SocialChannel = 'messenger' | 'whatsapp' | 'instagram' | 'tiktok';
+export type SocialChannel = 'messenger' | 'whatsapp' | 'instagram' | 'tiktok' | 'web';
+
+export type CrmEntryType = 'dm' | 'comment' | 'voice_note' | 'web_chat' | 'system_event';
+
+export type ConversationAiMode = 'auto_pilot' | 'review_mode' | 'human_takeover';
+
+export interface DeliveryQuoteInfo {
+  district: string;
+  charge: number;
+  freeReason?: string;
+}
+
+export interface EscalationTicket {
+  isEscalated: boolean;
+  ticketId?: string;
+  priority?: 'normal' | 'high' | 'urgent';
+  assignedRole?: 'supervisor' | 'staff';
+  reason?: string;
+  escalatedAt?: string;
+  escalatedBy?: string;
+  resolvedAt?: string;
+}
+
+export interface ExtractedOrderDraft {
+  hasOrderIntent?: boolean;
+  readyToConfirm?: boolean;
+  productId?: string;
+  productName?: string;
+  quantity: number;
+  customerName?: string;
+  customerPhone?: string;
+  district?: string;
+  address?: string;
+  unitPrice: number;
+  deliveryCharge: number;
+  totalAmount: number;
+  confidence: number;
+  confirmedOrderId?: string;
+}
+
+export interface PendingAiDraft {
+  text: string;
+  alternateText?: string;
+  intent?: string;
+  urgencyAngle?: string;
+  visualAnalysis?: string;
+  matchedProductIds?: string[];
+  deliveryQuote?: DeliveryQuoteInfo;
+  createdAt: string;
+}
 
 export interface ChannelConnectionConfig {
   id: SocialChannel;
@@ -277,27 +340,40 @@ export interface ChannelConnectionConfig {
 export interface CrmMessage {
   id: string;
   sender: 'customer' | 'admin' | 'ai_assistant';
+  entryType?: CrmEntryType;
+  postTitleOrId?: string;
   text: string;
   imageUrl?: string;
+  audioDataUri?: string;
+  audioTranscript?: string;
   matchedProductIds?: string[];
   visualAnalysis?: string;
   urgencyAngle?: string;
+  deliveryQuote?: DeliveryQuoteInfo;
+  aiStatus?: 'auto_sent' | 'pending_review' | 'approved' | 'rejected';
   timestamp: string;
 }
 
 export interface CrmConversation {
   id: string;
   channel: SocialChannel;
+  entryType?: CrmEntryType;
+  postTitleOrId?: string;
   customerId: string;
   customerName: string;
   customerHandle?: string;
   customerPhone?: string;
+  customerEmail?: string;
   customerAvatar?: string;
   lastMessage: string;
   lastMessageAt: string;
   unreadCount: number;
   status: 'open' | 'negotiating' | 'ready_to_order' | 'converted' | 'resolved';
   detectedLanguage?: Language;
+  aiMode?: ConversationAiMode;
+  pendingAiDraft?: PendingAiDraft;
+  escalation?: EscalationTicket;
+  extractedOrderDraft?: ExtractedOrderDraft;
   matchedProductIds?: string[];
   messages: CrmMessage[];
   createdAt: string;
@@ -311,7 +387,71 @@ export interface SalesCopilotResult {
   customerIntent: string;
   urgencyAngle: string;
   visualAnalysis?: string;
+  voiceTranscript?: string;
+  deliveryQuote?: DeliveryQuoteInfo;
+  requiresEscalation?: boolean;
+  escalationReason?: string;
+  escalationPriority?: 'normal' | 'high' | 'urgent';
+  extractedOrder?: ExtractedOrderDraft;
   matchedProducts: Product[];
   provider: string;
 }
+
+export interface AiTrainingFaq {
+  id: string;
+  question: string;
+  answer: string;
+}
+
+export interface ExternalCatalogItem {
+  id: string;
+  nameEn: string;
+  nameBn?: string;
+  brand: string;
+  category: string;
+  price: number;
+  originalPrice?: number;
+  stockCount: number;
+  inStock: boolean;
+  image?: string;
+  sku?: string;
+  freeDelivery?: boolean;
+  source: 'csv' | 'facebook' | 'shopify' | 'woocommerce';
+  updatedAt: string;
+}
+
+export interface AiTrainingConfig {
+  storePersona: string;
+  businessRules: string;
+  deliveryPolicyText: string;
+  fixedPricePolicy: string;
+  defaultAiMode: ConversationAiMode;
+  autoDetectBanglish: boolean;
+  autoCreateOrderFromChat: boolean;
+  autoEscalateComplaints: boolean;
+  faqs: AiTrainingFaq[];
+  externalCatalog: ExternalCatalogItem[];
+  lastCatalogSyncAt?: string;
+  updatedAt: string;
+  updatedBy?: string;
+}
+
+export interface LogisticsAndSheetsConfig {
+  steadfastApiKey: string;
+  steadfastSecretKey: string;
+  pathaoClientId: string;
+  pathaoClientSecret: string;
+  pathaoStoreId: string;
+  pathaoAccessToken: string;
+  googleSheetsWebhookUrl: string;
+  googleSheetName: string;
+  autoPushOrdersToSheets: boolean;
+  shopifyStoreUrl: string;
+  shopifyWebhookSecret: string;
+  wooCommerceStoreUrl: string;
+  wooCommerceConsumerKey: string;
+  updatedAt: string;
+  updatedBy?: string;
+}
+
 

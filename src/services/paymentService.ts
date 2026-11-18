@@ -1,11 +1,13 @@
 import { 
   doc, 
   getDoc, 
+  getDocFromServer,
   setDoc, 
   onSnapshot, 
   Unsubscribe 
 } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { safeGetJSON, safeSetJSON, STORAGE_KEYS } from '../utils/storage';
 import { PaymentSettings, MfsGatewayConfig, MfsAccountType } from '../types';
 
 const SETTINGS_COLLECTION = 'settings';
@@ -127,14 +129,27 @@ export const DEFAULT_PAYMENT_SETTINGS: PaymentSettings = {
   updatedAt: new Date().toISOString(),
 };
 
+export function getCachedPaymentSettings(): PaymentSettings {
+  return safeGetJSON<PaymentSettings>(STORAGE_KEYS.CACHED_PAYMENT_SETTINGS, DEFAULT_PAYMENT_SETTINGS);
+}
+
 /**
  * Fetch current Payment Gateway settings from Firestore
  */
-export async function getPaymentSettings(): Promise<PaymentSettings> {
+export async function getPaymentSettings(forceServer = false): Promise<PaymentSettings> {
   const path = `${SETTINGS_COLLECTION}/${PAYMENT_SETTINGS_DOC}`;
   try {
     const docRef = doc(db, SETTINGS_COLLECTION, PAYMENT_SETTINGS_DOC);
-    const docSnap = await getDoc(docRef);
+    let docSnap;
+    if (forceServer) {
+      try {
+        docSnap = await getDocFromServer(docRef);
+      } catch {
+        docSnap = await getDoc(docRef);
+      }
+    } else {
+      docSnap = await getDoc(docRef);
+    }
 
     if (docSnap.exists()) {
       const data = docSnap.data() as Partial<PaymentSettings>;
@@ -142,7 +157,7 @@ export async function getPaymentSettings(): Promise<PaymentSettings> {
         ? data.flatDeliveryCharge
         : (typeof data.deliveryCharge === 'number' ? data.deliveryCharge : 120);
 
-      return {
+      const merged: PaymentSettings = {
         ...DEFAULT_PAYMENT_SETTINGS,
         ...data,
         flatDeliveryCharge: resolvedDeliveryFee,
@@ -154,6 +169,8 @@ export async function getPaymentSettings(): Promise<PaymentSettings> {
           rocket: { ...DEFAULT_PAYMENT_SETTINGS.gateways.rocket, ...(data.gateways?.rocket || {}) },
         },
       };
+      safeSetJSON(STORAGE_KEYS.CACHED_PAYMENT_SETTINGS, merged);
+      return merged;
     }
 
     // Document doesn't exist yet in Firestore; only attempt seeding when signed in
@@ -165,10 +182,10 @@ export async function getPaymentSettings(): Promise<PaymentSettings> {
       }
     }
 
-    return DEFAULT_PAYMENT_SETTINGS;
+    return getCachedPaymentSettings();
   } catch (error) {
-    console.warn('Failed to get payment settings from Firestore, using local defaults:', error);
-    return DEFAULT_PAYMENT_SETTINGS;
+    console.warn('Failed to get payment settings from Firestore, using cached/defaults:', error);
+    return getCachedPaymentSettings();
   }
 }
 
@@ -186,6 +203,7 @@ export async function savePaymentSettings(settings: PaymentSettings, adminEmail?
   try {
     const docRef = doc(db, SETTINGS_COLLECTION, PAYMENT_SETTINGS_DOC);
     await setDoc(docRef, updatedSettings);
+    safeSetJSON(STORAGE_KEYS.CACHED_PAYMENT_SETTINGS, updatedSettings);
     return updatedSettings;
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
@@ -251,13 +269,15 @@ export function subscribeToPaymentSettings(
             rocket: { ...DEFAULT_PAYMENT_SETTINGS.gateways.rocket, ...(data.gateways?.rocket || {}) },
           },
         };
+        safeSetJSON(STORAGE_KEYS.CACHED_PAYMENT_SETTINGS, merged);
         onUpdate(merged);
       } else {
-        onUpdate(DEFAULT_PAYMENT_SETTINGS);
+        onUpdate(getCachedPaymentSettings());
       }
     },
     (error) => {
       console.warn('Real-time payment settings snapshot error:', error);
+      onUpdate(getCachedPaymentSettings());
       if (onError) {
         onError(error);
       }
@@ -267,6 +287,7 @@ export function subscribeToPaymentSettings(
 
 export const paymentService = {
   getPaymentSettings,
+  getCachedPaymentSettings,
   savePaymentSettings,
   updateGatewayConfig,
   subscribeToPaymentSettings,

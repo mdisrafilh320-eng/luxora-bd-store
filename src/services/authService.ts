@@ -15,6 +15,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
   limit,
   query,
@@ -23,6 +24,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from '../lib/firebase';
+import { clearSessionCaches, safeSetJSON, STORAGE_KEYS } from '../utils/storage';
 import {
   UserProfile,
   UserRole,
@@ -99,10 +101,19 @@ export async function inspectExistingAccount(email: string): Promise<AccountExis
 /**
  * Retrieve user profile from Firestore (`users/{uid}`)
  */
-export async function getUserProfile(uid: string): Promise<UserProfile | null> {
+export async function getUserProfile(uid: string, forceServer = false): Promise<UserProfile | null> {
   try {
     const userDocRef = doc(db, USERS_COLLECTION, uid);
-    const snap = await getDoc(userDocRef);
+    let snap;
+    if (forceServer) {
+      try {
+        snap = await getDocFromServer(userDocRef);
+      } catch {
+        snap = await getDoc(userDocRef);
+      }
+    } else {
+      snap = await getDoc(userDocRef);
+    }
     if (snap.exists()) {
       return snap.data() as UserProfile;
     }
@@ -171,11 +182,7 @@ export async function syncUserProfile(
       await updateDoc(userRef, updatePayload);
     }
 
-    try {
-      localStorage.setItem('luxora_user', JSON.stringify(profile));
-    } catch {
-      // ignore storage errors
-    }
+    safeSetJSON(STORAGE_KEYS.USER, profile);
 
     return profile;
   } catch (error) {
@@ -253,11 +260,7 @@ export async function saveUserCheckoutProfile(
         updatedAt: now,
       };
 
-      try {
-        localStorage.setItem('luxora_user', JSON.stringify(updatedProfile));
-      } catch {
-        // ignore
-      }
+      safeSetJSON(STORAGE_KEYS.USER, updatedProfile);
 
       return updatedProfile;
     } else {
@@ -284,11 +287,7 @@ export async function saveUserCheckoutProfile(
 
       await setDoc(userRef, newProfile);
 
-      try {
-        localStorage.setItem('luxora_user', JSON.stringify(newProfile));
-      } catch {
-        // ignore
-      }
+      safeSetJSON(STORAGE_KEYS.USER, newProfile);
 
       return newProfile;
     }
@@ -407,13 +406,7 @@ export async function logoutUser(): Promise<void> {
   } catch (err) {
     console.warn('Firebase signout error:', err);
   }
-  try {
-    localStorage.removeItem('luxora_user');
-    localStorage.removeItem('luxora_guest_session');
-    localStorage.removeItem('luxora_cached_orders');
-  } catch {
-    // ignore
-  }
+  clearSessionCaches();
 }
 
 /**

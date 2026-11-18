@@ -941,15 +941,17 @@ export const ProductImageUploader: React.FC<ProductImageUploaderProps> = ({
               >
                 {/* Image Preview Frame */}
                 <div className="relative aspect-square overflow-hidden bg-[#0A0B0F]">
-                  <img
-                    src={item.url}
-                    alt={item.isMain ? 'Cover Photo' : `Gallery Image ${idx}`}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      (e.target as HTMLElement).style.display = 'none';
-                    }}
-                  />
+                  {item.url?.trim() ? (
+                    <img
+                      src={item.url}
+                      alt={item.isMain ? 'Cover Photo' : `Gallery Image ${idx}`}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                  ) : null}
 
                   {/* Top-Left Role Tag: Cover Photo vs Gallery Image */}
                   {item.isMain ? (
@@ -1059,7 +1061,7 @@ export const ProductImageUploader: React.FC<ProductImageUploaderProps> = ({
       )}
 
       {/* Fullscreen Image Preview Lightbox Modal */}
-      {previewModalUrl && (
+      {previewModalUrl?.trim() && (
         <div 
           className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
           onClick={() => setPreviewModalUrl(null)}

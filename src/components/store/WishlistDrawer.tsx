@@ -90,16 +90,26 @@ export const WishlistDrawer: React.FC = () => {
                         key={product.id}
                         className="flex gap-3 sm:gap-3.5 bg-[#14141A] border border-[#22222C] p-3 rounded-xl relative group"
                       >
-                        <img
-                          src={product.image}
-                          alt={title}
-                          referrerPolicy="no-referrer"
-                          onClick={() => {
-                            setIsWishlistOpen(false);
-                            setQuickViewProduct(product);
-                          }}
-                          className="w-20 h-20 object-cover rounded-lg border border-white/5 bg-black cursor-pointer hover:opacity-85 transition-opacity shrink-0"
-                        />
+                        {product.image?.trim() ? (
+                          <img
+                            src={product.image}
+                            alt={title}
+                            referrerPolicy="no-referrer"
+                            onClick={() => {
+                              setIsWishlistOpen(false);
+                              setQuickViewProduct(product);
+                            }}
+                            className="w-20 h-20 object-cover rounded-lg border border-white/5 bg-black cursor-pointer hover:opacity-85 transition-opacity shrink-0"
+                          />
+                        ) : (
+                          <div
+                            onClick={() => {
+                              setIsWishlistOpen(false);
+                              setQuickViewProduct(product);
+                            }}
+                            className="w-20 h-20 rounded-lg border border-white/5 bg-black cursor-pointer shrink-0"
+                          />
+                        )}
                         <div className="flex-1 min-w-0 flex flex-col justify-between">
                           <div>
                             <div className="flex items-start justify-between gap-2">

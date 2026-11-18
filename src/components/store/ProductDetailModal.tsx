@@ -526,15 +526,17 @@ export const ProductDetailModal: React.FC = () => {
                   onTouchEnd={handleTouchEnd}
                   className="aspect-square bg-[#08080B] border border-[#1E1E24] rounded-2xl overflow-hidden relative group select-none"
                 >
-                  <img
-                    src={activeImage}
-                    alt={primaryTitle}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80';
-                    }}
-                  />
+                  {activeImage?.trim() ? (
+                    <img
+                      src={activeImage}
+                      alt={primaryTitle}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80';
+                      }}
+                    />
+                  ) : null}
 
                   {/* Gallery Prev/Next Buttons */}
                   {galleryImages.length > 1 && (
@@ -593,12 +595,14 @@ export const ProductDetailModal: React.FC = () => {
                         }`}
                         aria-label={`View image ${idx + 1}`}
                       >
-                        <img
-                          src={img}
-                          alt={`${primaryTitle} ${idx + 1}`}
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover"
-                        />
+                        {img?.trim() ? (
+                          <img
+                            src={img}
+                            alt={`${primaryTitle} ${idx + 1}`}
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : null}
                       </button>
                     ))}
                   </div>
@@ -1068,12 +1072,16 @@ export const ProductDetailModal: React.FC = () => {
                       onClick={() => setQuickViewProduct(rel)}
                       className="p-3 rounded-2xl slate-bg border border-white/5 hover:border-[#D4AF37]/40 transition-all cursor-pointer flex items-center gap-3 group"
                     >
-                      <img
-                        src={rel.image}
-                        alt={rel.nameEn}
-                        referrerPolicy="no-referrer"
-                        className="w-14 h-14 rounded-xl object-cover shrink-0"
-                      />
+                      {rel.image?.trim() ? (
+                        <img
+                          src={rel.image}
+                          alt={rel.nameEn}
+                          referrerPolicy="no-referrer"
+                          className="w-14 h-14 rounded-xl object-cover shrink-0"
+                        />
+                      ) : (
+                        <div className="w-14 h-14 rounded-xl bg-white/5 border border-white/10 shrink-0" />
+                      )}
                       <div className="overflow-hidden min-w-0">
                         <span className="text-[10px] text-gray-500 uppercase font-mono block truncate">{rel.brand}</span>
                         <h5 className="text-xs font-bold text-white group-hover:text-[#D4AF37] transition-colors truncate">
