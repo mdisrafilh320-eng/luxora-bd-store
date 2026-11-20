@@ -1,4 +1,5 @@
 import { Language, CategoryItem, ProductSpec } from '../types';
+import { safeGetItem, safeSetItem } from '../utils/storage';
 
 export interface FormattedProductSuggestion {
   nameEn: string;
@@ -74,16 +75,12 @@ export const QUICK_SUGGESTIONS: QuickSuggestion[] = [
 ];
 
 export function getOrCreateWebChatSessionId(): string {
-  try {
-    const key = 'luxora_webchat_session_id';
-    const existing = localStorage.getItem(key);
-    if (existing) return existing;
-    const fresh = `web-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-    localStorage.setItem(key, fresh);
-    return fresh;
-  } catch {
-    return `web-${Date.now().toString(36)}`;
-  }
+  const key = 'luxora_webchat_session_id';
+  const existing = safeGetItem(key);
+  if (existing) return existing;
+  const fresh = `web-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  safeSetItem(key, fresh);
+  return fresh;
 }
 
 /**

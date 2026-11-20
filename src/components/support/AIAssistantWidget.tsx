@@ -29,6 +29,7 @@ import {
   getOrCreateWebChatSessionId,
   QuickSuggestion 
 } from '../../services/aiAssistantService';
+import { safeGetItem, safeSetItem, STORAGE_KEYS } from '../../utils/storage';
 
 export const AIAssistantWidget: React.FC = () => {
   const { language, setActiveView } = useApp();
@@ -37,11 +38,7 @@ export const AIAssistantWidget: React.FC = () => {
   const [isMinimized, setIsMinimized] = useState(false);
   const [inputText, setInputText] = useState('');
   const [visitorPhone, setVisitorPhone] = useState(() => {
-    try {
-      return localStorage.getItem('luxora_webchat_phone') || '';
-    } catch {
-      return '';
-    }
+    return safeGetItem(STORAGE_KEYS.WEBCHAT_PHONE) || '';
   });
   const [showPhonePrompt, setShowPhonePrompt] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -376,11 +373,7 @@ export const AIAssistantWidget: React.FC = () => {
                         value={visitorPhone}
                         onChange={(e) => {
                           setVisitorPhone(e.target.value);
-                          try {
-                            localStorage.setItem('luxora_webchat_phone', e.target.value);
-                          } catch {
-                            // ignore
-                          }
+                          safeSetItem(STORAGE_KEYS.WEBCHAT_PHONE, e.target.value);
                         }}
                         placeholder={language === 'bn' ? 'আপনার মোবাইল নম্বর (017...)' : 'Your BD Mobile (017...)'}
                         className="flex-1 bg-[#0C0C10] border border-[#2A2A38] focus:border-[#D4AF37] rounded-lg px-2.5 py-1.5 text-[11px] text-white placeholder-gray-500 focus:outline-none"

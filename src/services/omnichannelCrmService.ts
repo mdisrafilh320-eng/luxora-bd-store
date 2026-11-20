@@ -421,7 +421,7 @@ export async function saveAiTrainingConfig(config: AiTrainingConfig): Promise<vo
         'Content-Type': 'application/json',
         Authorization: `Bearer ${idToken}`,
       },
-      body: JSON.stringify({ training: payload }),
+      body: JSON.stringify({ config: payload }),
     });
   } catch {
     // non-fatal

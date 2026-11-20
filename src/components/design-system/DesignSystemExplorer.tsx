@@ -22,6 +22,7 @@ import { Input } from '../ui/Input';
 import { SectionHeader } from '../ui/SectionHeader';
 import { TrustBadges } from '../common/TrustBadges';
 import { formatBDT } from '../../translations';
+import { copyTextToClipboard } from '../../services/shareService';
 
 export const DesignSystemExplorer: React.FC = () => {
   const { 
@@ -42,7 +43,7 @@ export const DesignSystemExplorer: React.FC = () => {
   const [testInput, setTestInput] = useState('');
 
   const copyToClipboard = (hex: string, label: string) => {
-    navigator.clipboard?.writeText(hex);
+    void copyTextToClipboard(hex);
     setCopiedHex(hex);
     addToast({
       type: 'success',

@@ -36,6 +36,7 @@ import { BD_DIVISIONS, BD_DISTRICTS, getUpazilasForDistrict } from '../../data/b
 import { PaymentMethod, PaymentOption, Order, MfsGatewayConfig } from '../../types';
 import { orderService } from '../../services/orderService';
 import { uploadPaymentProof } from '../../services/storageService';
+import { copyTextToClipboard } from '../../services/shareService';
 import { OrderConfirmationModal } from './OrderConfirmationModal';
 
 const resolveDivisionId = (value?: string): string => {
@@ -228,8 +229,8 @@ export const CheckoutPage: React.FC = () => {
     notesBn: dynamicConfig?.notesBn || staticMfs.instructionsBn[1],
   };
 
-  const handleCopyMfsNumber = () => {
-    navigator.clipboard.writeText(currentMfs.accountNumber);
+  const handleCopyMfsNumber = async () => {
+    await copyTextToClipboard(currentMfs.accountNumber);
     setCopiedNumber(true);
     setTimeout(() => setCopiedNumber(false), 2000);
   };

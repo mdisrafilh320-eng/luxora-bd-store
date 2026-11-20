@@ -30,6 +30,7 @@ import { searchOrdersForTracking, subscribeToUserOrders } from '../../services/o
 import { fetchLiveCourierTracking, LiveCourierDetails } from '../../services/courierService';
 import { OrderTrackingTimeline } from './OrderTrackingTimeline';
 import { formatBDT } from '../../translations';
+import { copyTextToClipboard } from '../../services/shareService';
 
 interface CourierTrackingViewProps {
   initialOrderId?: string;
@@ -134,8 +135,8 @@ export const CourierTrackingView: React.FC<CourierTrackingViewProps> = ({
     }
   };
 
-  const handleCopyConsignment = (consignmentId: string) => {
-    navigator.clipboard.writeText(consignmentId);
+  const handleCopyConsignment = async (consignmentId: string) => {
+    await copyTextToClipboard(consignmentId);
     setCopiedConsignment(true);
     setTimeout(() => setCopiedConsignment(false), 2000);
     addToast({
@@ -146,10 +147,10 @@ export const CourierTrackingView: React.FC<CourierTrackingViewProps> = ({
     });
   };
 
-  const handleShareTracking = () => {
+  const handleShareTracking = async () => {
     if (!currentOrder) return;
     const shareUrl = `${window.location.origin}?track=${currentOrder.id}`;
-    navigator.clipboard.writeText(shareUrl);
+    await copyTextToClipboard(shareUrl);
     setCopiedTrackingLink(true);
     setTimeout(() => setCopiedTrackingLink(false), 2000);
     addToast({

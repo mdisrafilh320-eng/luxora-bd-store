@@ -50,6 +50,22 @@ function escapeHtmlAttr(val: string): string {
     .replace(/>/g, "&gt;");
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    promise.then(
+      (val) => {
+        clearTimeout(timer);
+        resolve(val);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
 function getRequestPublicOrigin(req: express.Request): string {
   const proto =
     (req.headers["x-forwarded-proto"] as string)?.split(",")[0]?.trim() ||
@@ -417,7 +433,11 @@ app.post("/api/ai/chat", async (req, res) => {
           },
         });
 
-        const response = await chat.sendMessage({ message });
+        const response = await withTimeout(
+          chat.sendMessage({ message }),
+          7500,
+          "Gemini chat"
+        );
         replyText = (response.text || "").trim();
         providerUsed = "gemini-4-hydrogen";
       } catch (aiErr) {
@@ -512,47 +532,51 @@ Requirements:
 5. Write a persuasive, professional luxury product description in English (descriptionEn) and Bengali (descriptionBn), each opening with a 2-sentence overview followed by concise "• " bullet-point highlights.
 6. Extract price, originalPrice, stockCount, warrantyEn, and freeDelivery if mentioned in the notes (use 0 for prices/stock if not mentioned).`;
 
-        const response = await aiClient.models.generateContent({
-          model: "gemini-4-hydrogen",
-          contents: prompt,
-          config: {
-            systemInstruction:
-              "You are a senior e-commerce merchandiser and bilingual copywriter for Luxora BD, a minimalist luxury store in Bangladesh. Output strictly valid JSON matching the requested schema.",
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                nameEn: { type: Type.STRING, description: "Polished English product title" },
-                nameBn: { type: Type.STRING, description: "Polished Bengali product title" },
-                taglineEn: { type: Type.STRING, description: "Short English tagline (4-8 words)" },
-                taglineBn: { type: Type.STRING, description: "Short Bengali tagline" },
-                brand: { type: Type.STRING, description: "Product brand name" },
-                suggestedCategory: { type: Type.STRING, description: "Exact slug from available categories" },
-                descriptionEn: { type: Type.STRING, description: "Professional English description with bullet points" },
-                descriptionBn: { type: Type.STRING, description: "Professional Bengali description with bullet points" },
-                specs: {
-                  type: Type.ARRAY,
-                  description: "Key technical specs parsed as label/value pairs",
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      labelEn: { type: Type.STRING },
-                      labelBn: { type: Type.STRING },
-                      valueEn: { type: Type.STRING },
-                      valueBn: { type: Type.STRING },
+        const response = await withTimeout(
+          aiClient.models.generateContent({
+            model: "gemini-4-hydrogen",
+            contents: prompt,
+            config: {
+              systemInstruction:
+                "You are a senior e-commerce merchandiser and bilingual copywriter for Luxora BD, a minimalist luxury store in Bangladesh. Output strictly valid JSON matching the requested schema.",
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  nameEn: { type: Type.STRING, description: "Polished English product title" },
+                  nameBn: { type: Type.STRING, description: "Polished Bengali product title" },
+                  taglineEn: { type: Type.STRING, description: "Short English tagline (4-8 words)" },
+                  taglineBn: { type: Type.STRING, description: "Short Bengali tagline" },
+                  brand: { type: Type.STRING, description: "Product brand name" },
+                  suggestedCategory: { type: Type.STRING, description: "Exact slug from available categories" },
+                  descriptionEn: { type: Type.STRING, description: "Professional English description with bullet points" },
+                  descriptionBn: { type: Type.STRING, description: "Professional Bengali description with bullet points" },
+                  specs: {
+                    type: Type.ARRAY,
+                    description: "Key technical specs parsed as label/value pairs",
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        labelEn: { type: Type.STRING },
+                        labelBn: { type: Type.STRING },
+                        valueEn: { type: Type.STRING },
+                        valueBn: { type: Type.STRING },
+                      },
                     },
                   },
+                  suggestedPrice: { type: Type.NUMBER, description: "Selling price in BDT if present, else 0" },
+                  suggestedOriginalPrice: { type: Type.NUMBER, description: "Original MSRP in BDT if present, else 0" },
+                  suggestedStockCount: { type: Type.NUMBER, description: "Stock count if present, else 0" },
+                  freeDelivery: { type: Type.BOOLEAN, description: "True if notes mention free delivery" },
+                  warrantyEn: { type: Type.STRING, description: "Warranty text if mentioned or standard Luxora warranty" },
+                  suggestedBadge: { type: Type.STRING, description: "One of: new, bestseller, limited" },
                 },
-                suggestedPrice: { type: Type.NUMBER, description: "Selling price in BDT if present, else 0" },
-                suggestedOriginalPrice: { type: Type.NUMBER, description: "Original MSRP in BDT if present, else 0" },
-                suggestedStockCount: { type: Type.NUMBER, description: "Stock count if present, else 0" },
-                freeDelivery: { type: Type.BOOLEAN, description: "True if notes mention free delivery" },
-                warrantyEn: { type: Type.STRING, description: "Warranty text if mentioned or standard Luxora warranty" },
-                suggestedBadge: { type: Type.STRING, description: "One of: new, bestseller, limited" },
               },
             },
-          },
-        });
+          }),
+          9000,
+          "Gemini format-product"
+        );
 
         const jsonText = (response.text || "").trim();
         if (jsonText) {
@@ -711,45 +735,48 @@ async function verifyAdminBearerToken(
 }
 
 async function fetchAllLiveProductsForSalesAI(fallbackItems?: any[]): Promise<SalesCatalogProduct[]> {
-  if (salesCatalogCache && salesCatalogCache.expiresAt > Date.now() && salesCatalogCache.items.length > 0) {
+  if (
+    salesCatalogCache &&
+    salesCatalogCache.expiresAt > Date.now() &&
+    (salesCatalogCache.items.length > 0 || !fallbackItems?.length)
+  ) {
     return salesCatalogCache.items;
   }
 
   const merged = new Map<string, SalesCatalogProduct>();
   if (serverDb) {
-    for (const col of ["products", "luxora-products"]) {
-      try {
-        const snap = await Promise.race([
-          getDocs(collection(serverDb, col)),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Catalog fetch timeout")), 4500)),
-        ]);
-        snap.forEach((docSnap) => {
-          const d: any = docSnap.data() || {};
-          const id = String(d.id || docSnap.id).trim();
-          if (!id || merged.has(id)) return;
-          const galleryArr = Array.isArray(d.gallery) ? d.gallery : [];
-          merged.set(id, {
-            id,
-            nameEn: String(d.nameEn || d.nameBn || "Luxora Edition").trim(),
-            nameBn: String(d.nameBn || d.nameEn || "").trim(),
-            taglineEn: String(d.taglineEn || "").trim(),
-            taglineBn: String(d.taglineBn || "").trim(),
-            brand: String(d.brand || "Luxora Prime").trim(),
-            category: String(d.category || "gadgets").trim(),
-            price: Number(d.price) || 0,
-            originalPrice: Number(d.originalPrice) || 0,
-            inStock: d.inStock !== false && (Number(d.stockCount ?? 10) > 0),
-            stockCount: Number(d.stockCount ?? 10),
-            image: String(d.image || galleryArr[0] || "").trim(),
-            sku: d.sku ? String(d.sku) : undefined,
-            freeDelivery: Boolean(d.freeDelivery),
-            warrantyEn: d.warrantyEn ? String(d.warrantyEn) : undefined,
-            descriptionEn: String(d.descriptionEn || "").slice(0, 220),
-          });
+    const dbRef = serverDb;
+    const settled = await Promise.allSettled(
+      ["products", "luxora-products"].map((col) =>
+        withTimeout(getDocs(collection(dbRef, col)), 2500, `Catalog fetch (${col})`)
+      )
+    );
+    for (const res of settled) {
+      if (res.status !== "fulfilled") continue;
+      res.value.forEach((docSnap) => {
+        const d: any = docSnap.data() || {};
+        const id = String(d.id || docSnap.id).trim();
+        if (!id || merged.has(id)) return;
+        const galleryArr = Array.isArray(d.gallery) ? d.gallery : [];
+        merged.set(id, {
+          id,
+          nameEn: String(d.nameEn || d.nameBn || "Luxora Edition").trim(),
+          nameBn: String(d.nameBn || d.nameEn || "").trim(),
+          taglineEn: String(d.taglineEn || "").trim(),
+          taglineBn: String(d.taglineBn || "").trim(),
+          brand: String(d.brand || "Luxora Prime").trim(),
+          category: String(d.category || "gadgets").trim(),
+          price: Number(d.price) || 0,
+          originalPrice: Number(d.originalPrice) || 0,
+          inStock: d.inStock !== false && (Number(d.stockCount ?? 10) > 0),
+          stockCount: Number(d.stockCount ?? 10),
+          image: String(d.image || galleryArr[0] || "").trim(),
+          sku: d.sku ? String(d.sku) : undefined,
+          freeDelivery: Boolean(d.freeDelivery),
+          warrantyEn: d.warrantyEn ? String(d.warrantyEn) : undefined,
+          descriptionEn: String(d.descriptionEn || "").slice(0, 220),
         });
-      } catch {
-        // try next collection
-      }
+      });
     }
   }
 
@@ -800,9 +827,10 @@ async function fetchAllLiveProductsForSalesAI(fallbackItems?: any[]): Promise<Sa
   }
 
   const items = Array.from(merged.values());
-  if (items.length > 0) {
-    salesCatalogCache = { items, expiresAt: Date.now() + 45_000 };
-  }
+  salesCatalogCache = {
+    items,
+    expiresAt: Date.now() + (items.length > 0 ? 45_000 : 20_000),
+  };
   return items;
 }
 
@@ -1431,17 +1459,21 @@ async function transcribeAudioWithGemini(audioDataUri: string): Promise<{
 
   if (aiClient) {
     try {
-      const response = await aiClient.models.generateContent({
-        model: "gemini-3.5-transcribe",
-        contents: {
-          parts: [
-            { inlineData: { mimeType, data } },
-            {
-              text: "Transcribe this customer voice message verbatim. The customer may speak Bengali, Banglish (Romanized Bengali), or English about an e-commerce product or order. Return only the clean spoken transcription.",
-            },
-          ],
-        },
-      });
+      const response = await withTimeout(
+        aiClient.models.generateContent({
+          model: "gemini-3.5-transcribe",
+          contents: {
+            parts: [
+              { inlineData: { mimeType, data } },
+              {
+                text: "Transcribe this customer voice message verbatim. The customer may speak Bengali, Banglish (Romanized Bengali), or English about an e-commerce product or order. Return only the clean spoken transcription.",
+              },
+            ],
+          },
+        }),
+        12000,
+        "Gemini transcribe"
+      );
       const text = (response.text || "").trim();
       if (text) {
         return { transcript: text, provider: "gemini-3.5-transcribe" };
@@ -1591,50 +1623,54 @@ Strict Closing & Operations Rules:
         ? { parts: [{ inlineData: imagePartInput }, { text: promptText }] }
         : promptText;
 
-      const response = await aiClient.models.generateContent({
-        model: "gemini-4-hydrogen",
-        contents: contentsPayload,
-        config: {
-          systemInstruction:
-            "You are the Elite Head of Sales & Omnichannel Closing Strategist for Luxora BD (Bangladesh). You combine warm Bangladeshi hospitality ('আসসালামু আলাইকুম') with persuasive psychological closing, strict fixed-price integrity, Banglish/Bengali/English fluency, automatic delivery calculation, complaint escalation detection, and structured order extraction. Output strictly valid JSON matching the schema.",
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              visualAnalysis: { type: Type.STRING, description: "What is visible in the attached image, or empty string" },
-              matchedProductIds: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING },
-                description: "Exact catalog product IDs matching the query or image",
-              },
-              customerIntent: { type: Type.STRING, description: "Short label e.g. Price Inquiry, Bargaining, Order Confirmation, Complaint Escalation" },
-              detectedLanguage: { type: Type.STRING, description: "Either 'bn' or 'en'" },
-              urgencyAngle: { type: Type.STRING, description: "One-line scarcity/urgency lever used" },
-              deliveryDistrict: { type: Type.STRING, description: "Detected delivery district or Dhaka" },
-              calculatedDeliveryCharge: { type: Type.NUMBER, description: "Calculated delivery fee in BDT (0, 70, 100, or 120)" },
-              requiresEscalation: { type: Type.BOOLEAN, description: "True if complaint, damaged unit, refund, or anger needs Supervisor" },
-              escalationReason: { type: Type.STRING, description: "Reason for escalation if true" },
-              escalationPriority: { type: Type.STRING, description: "normal, high, or urgent" },
-              extractedOrder: {
-                type: Type.OBJECT,
-                properties: {
-                  hasOrderIntent: { type: Type.BOOLEAN },
-                  readyToConfirm: { type: Type.BOOLEAN },
-                  productId: { type: Type.STRING },
-                  productName: { type: Type.STRING },
-                  quantity: { type: Type.NUMBER },
-                  customerName: { type: Type.STRING },
-                  customerPhone: { type: Type.STRING },
-                  district: { type: Type.STRING },
-                  address: { type: Type.STRING },
+      const response = await withTimeout(
+        aiClient.models.generateContent({
+          model: "gemini-4-hydrogen",
+          contents: contentsPayload,
+          config: {
+            systemInstruction:
+              "You are the Elite Head of Sales & Omnichannel Closing Strategist for Luxora BD (Bangladesh). You combine warm Bangladeshi hospitality ('আসসালামু আলাইকুম') with persuasive psychological closing, strict fixed-price integrity, Banglish/Bengali/English fluency, automatic delivery calculation, complaint escalation detection, and structured order extraction. Output strictly valid JSON matching the schema.",
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                visualAnalysis: { type: Type.STRING, description: "What is visible in the attached image, or empty string" },
+                matchedProductIds: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description: "Exact catalog product IDs matching the query or image",
                 },
+                customerIntent: { type: Type.STRING, description: "Short label e.g. Price Inquiry, Bargaining, Order Confirmation, Complaint Escalation" },
+                detectedLanguage: { type: Type.STRING, description: "Either 'bn' or 'en'" },
+                urgencyAngle: { type: Type.STRING, description: "One-line scarcity/urgency lever used" },
+                deliveryDistrict: { type: Type.STRING, description: "Detected delivery district or Dhaka" },
+                calculatedDeliveryCharge: { type: Type.NUMBER, description: "Calculated delivery fee in BDT (0, 70, 100, or 120)" },
+                requiresEscalation: { type: Type.BOOLEAN, description: "True if complaint, damaged unit, refund, or anger needs Supervisor" },
+                escalationReason: { type: Type.STRING, description: "Reason for escalation if true" },
+                escalationPriority: { type: Type.STRING, description: "normal, high, or urgent" },
+                extractedOrder: {
+                  type: Type.OBJECT,
+                  properties: {
+                    hasOrderIntent: { type: Type.BOOLEAN },
+                    readyToConfirm: { type: Type.BOOLEAN },
+                    productId: { type: Type.STRING },
+                    productName: { type: Type.STRING },
+                    quantity: { type: Type.NUMBER },
+                    customerName: { type: Type.STRING },
+                    customerPhone: { type: Type.STRING },
+                    district: { type: Type.STRING },
+                    address: { type: Type.STRING },
+                  },
+                },
+                salesReply: { type: Type.STRING, description: "Ready-to-send persuasive sales message in primary language" },
+                salesReplyAlternate: { type: Type.STRING, description: "Alternative version in the second language (EN or BN)" },
               },
-              salesReply: { type: Type.STRING, description: "Ready-to-send persuasive sales message in primary language" },
-              salesReplyAlternate: { type: Type.STRING, description: "Alternative version in the second language (EN or BN)" },
             },
           },
-        },
-      });
+        }),
+        12000,
+        "Gemini sales-copilot"
+      );
 
       const rawJson = (response.text ?? "").trim();
       if (rawJson) {
@@ -2027,10 +2063,11 @@ app.post("/api/omnichannel/ai-training", async (req, res) => {
     res.status(adminAuth.status).json({ error: adminAuth.error });
     return;
   }
-  if (req.body?.config && typeof req.body.config === "object") {
+  const incomingTraining = req.body?.config || req.body?.training;
+  if (incomingTraining && typeof incomingTraining === "object") {
     runtimeAiTrainingConfig = {
       ...runtimeAiTrainingConfig,
-      ...req.body.config,
+      ...incomingTraining,
       updatedAt: new Date().toISOString(),
     };
     persistAiTrainingConfig();

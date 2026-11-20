@@ -81,7 +81,7 @@ import {
   updateConversationAiMode,
   updateConversationStatus,
 } from '../../services/omnichannelCrmService';
-import { getProductShareUrl } from '../../services/shareService';
+import { copyTextToClipboard, getProductShareUrl } from '../../services/shareService';
 import { PrintableInvoiceModal } from './PrintableInvoiceModal';
 
 const CHANNEL_META: Record<
@@ -641,8 +641,8 @@ export const OmnichannelSalesInboxTab: React.FC = () => {
         }
       );
 
-      if (replyMode === 'admin' && text && navigator.clipboard) {
-        navigator.clipboard.writeText(text).catch(() => {});
+      if (replyMode === 'admin' && text) {
+        void copyTextToClipboard(text);
       }
 
       // Clear pending draft if approved manually
@@ -1043,7 +1043,7 @@ export const OmnichannelSalesInboxTab: React.FC = () => {
 
   const handleCopyProductLink = (prod: Product) => {
     const url = getProductShareUrl(prod.id);
-    navigator.clipboard?.writeText(url);
+    void copyTextToClipboard(url);
     addToast({
       type: 'info',
       titleEn: 'Product Link Copied',
@@ -2060,7 +2060,7 @@ export const OmnichannelSalesInboxTab: React.FC = () => {
                         type="button"
                         onClick={() => {
                           const txt = selectedConversation.customerPhone || selectedConversation.customerHandle || selectedConversation.customerId;
-                          navigator.clipboard?.writeText(txt);
+                          void copyTextToClipboard(txt);
                           addToast({ type: 'info', titleEn: 'Contact Copied', titleBn: 'কন্টাক্ট কপি হয়েছে', descriptionEn: txt });
                         }}
                         className="px-2.5 py-1.5 rounded-lg bg-[#161923] hover:bg-[#1E2230] border border-neutral-800 text-neutral-300 text-[11px] flex items-center gap-1 cursor-pointer"
@@ -2425,7 +2425,7 @@ export const OmnichannelSalesInboxTab: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    navigator.clipboard?.writeText(webhookEndpointUrl);
+                    void copyTextToClipboard(webhookEndpointUrl);
                     addToast({ type: 'info', titleEn: 'Webhook URL Copied', titleBn: 'ওয়েবহুক লিংক কপি হয়েছে' });
                   }}
                   className="text-[#D4AF37] hover:underline flex items-center gap-1 cursor-pointer"

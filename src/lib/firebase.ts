@@ -114,9 +114,10 @@ export function isFirestoreQuotaOrOfflineError(error: unknown): boolean {
 }
 
 /**
- * Robust, traceable error handling conforming to Firebase Security rules guidelines
+ * Log structured Firestore error telemetry without throwing synchronously
+ * (safe for async onSnapshot error callbacks where throwing crashes the observer loop)
  */
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
+export function logFirestoreError(error: unknown, operationType: OperationType, path: string | null): FirestoreErrorInfo {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -133,8 +134,16 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   };
-  
+
   console.error('Firestore Error Log:', JSON.stringify(errInfo));
+  return errInfo;
+}
+
+/**
+ * Robust, traceable error handling conforming to Firebase Security rules guidelines
+ */
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
+  const errInfo = logFirestoreError(error, operationType, path);
   throw new Error(JSON.stringify(errInfo));
 }
 

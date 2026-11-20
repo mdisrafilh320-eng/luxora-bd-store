@@ -11,7 +11,7 @@ import {
   onSnapshot,
   Unsubscribe
 } from 'firebase/firestore';
-import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { auth, db, handleFirestoreError, logFirestoreError, OperationType } from '../lib/firebase';
 import { safeGetJSON, safeRemoveItem, safeSetJSON, STORAGE_KEYS } from '../utils/storage';
 import { Order, OrderStatus, CourierTracking } from '../types';
 
@@ -211,8 +211,12 @@ export function subscribeToUserOrders(
         onUpdate(orders);
       },
       (error) => {
+        logFirestoreError(error, OperationType.LIST, `${ORDERS_COLLECTION}?userId=${authUid}`);
+        const fallbackOrders = getLocalCachedOrders()
+          .filter((cached) => cached && cached.id && cached.userId === authUid)
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        onUpdate(fallbackOrders);
         if (onError) onError(error);
-        handleFirestoreError(error, OperationType.LIST, `${ORDERS_COLLECTION}?userId=${authUid}`);
       }
     );
   } catch (error) {

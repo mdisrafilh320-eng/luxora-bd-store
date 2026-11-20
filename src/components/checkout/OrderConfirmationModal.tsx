@@ -21,6 +21,7 @@ import {
 import { Order } from '../../types';
 import { formatBDT } from '../../translations';
 import { useApp } from '../../context/AppContext';
+import { copyTextToClipboard } from '../../services/shareService';
 
 interface OrderConfirmationModalProps {
   order: Order | null;
@@ -43,8 +44,8 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
 
   if (!isOpen || !order) return null;
 
-  const handleCopyOrderId = () => {
-    navigator.clipboard.writeText(order.id);
+  const handleCopyOrderId = async () => {
+    await copyTextToClipboard(order.id);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };

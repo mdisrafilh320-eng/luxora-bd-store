@@ -29,6 +29,7 @@ import { PaymentSettings, MfsGatewayConfig, MfsAccountType } from '../../types';
 import { DEFAULT_PAYMENT_SETTINGS } from '../../services/paymentService';
 import { formatBDT } from '../../translations';
 import { validateBangladeshiPhone } from '../../utils/security';
+import { copyTextToClipboard } from '../../services/shareService';
 
 export const PaymentSettingsTab: React.FC = () => {
   const { 
@@ -89,8 +90,8 @@ export const PaymentSettingsTab: React.FC = () => {
   };
 
   // Copy helper
-  const handleCopyNumber = (num: string, key: string) => {
-    navigator.clipboard.writeText(num);
+  const handleCopyNumber = async (num: string, key: string) => {
+    await copyTextToClipboard(num);
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(null), 2000);
   };

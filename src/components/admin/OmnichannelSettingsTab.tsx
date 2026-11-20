@@ -56,6 +56,7 @@ import {
   triggerWebhookPipelineTest,
 } from '../../services/omnichannelCrmService';
 import { orderService } from '../../services/orderService';
+import { copyTextToClipboard } from '../../services/shareService';
 
 const CHANNEL_UI_META: Record<
   SocialChannel,
@@ -545,7 +546,7 @@ export const OmnichannelSettingsTab: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      navigator.clipboard?.writeText(webhookCallbackUrl);
+                      void copyTextToClipboard(webhookCallbackUrl);
                       addToast({ type: 'info', titleEn: 'Webhook URL Copied', titleBn: 'ওয়েবহুক ইউআরএল কপি হয়েছে' });
                     }}
                     className="px-3 py-2.5 rounded-xl bg-[#1A1D27] hover:bg-[#232735] border border-neutral-700 text-neutral-200 flex items-center gap-1.5 shrink-0 cursor-pointer"
@@ -567,7 +568,7 @@ export const OmnichannelSettingsTab: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      navigator.clipboard?.writeText(sharedVerifyToken);
+                      void copyTextToClipboard(sharedVerifyToken);
                       addToast({ type: 'info', titleEn: 'Verify Token Copied', titleBn: 'টোকেন কপি হয়েছে' });
                     }}
                     className="px-3 py-2.5 rounded-xl bg-[#1A1D27] hover:bg-[#232735] border border-neutral-700 text-neutral-200 flex items-center gap-1.5 shrink-0 cursor-pointer"
